@@ -9,21 +9,34 @@ che disegna tre tipologie grafiche: **POLYGON**, **POINT**, **MARKER**.
 - `src/app/map/map.component.ts` – il componente mappa
 - `src/app/app.ts` – esempio d'uso
 
-## Setup in un progetto Angular 22
+## Avvio rapido
+
+Requisiti: Node.js 20.19+ / 22.12+ / 24+.
+
+```bash
+npm install      # installa Angular e Leaflet in node_modules
+npm start        # avvia il dev server su http://localhost:4200
+```
+
+> L'errore `could not resolve "node_modules/leaflet/dist/leaflet.css"` indica che
+> Leaflet non è installato: eseguire `npm install` nella cartella che contiene `angular.json`.
+
+## Usare il componente in un altro progetto Angular 22
 
 ```bash
 npm install leaflet
 npm install -D @types/leaflet
 ```
 
-In `angular.json` (target `build.options`) aggiungere CSS e immagini di Leaflet:
+Copiare la cartella `src/app/map` e, in `angular.json` (target `build.options`), aggiungere CSS e immagini di Leaflet:
 
 ```json
 "styles": ["node_modules/leaflet/dist/leaflet.css", "src/styles.css"],
 "assets": [
   { "glob": "**/*", "input": "public" },
   { "glob": "**/*", "input": "node_modules/leaflet/dist/images", "output": "leaflet" }
-]
+],
+"allowedCommonJsDependencies": ["leaflet"]
 ```
 
 ## Uso
