@@ -1,16 +1,17 @@
 import { Component, signal } from '@angular/core';
 
-import { MapComponent } from './map/map.component';
 import { MapFeature } from './map/map-feature.model';
+import { MapsComponent, MapsFilter } from './maps/maps.component';
 
 @Component({
   selector: 'app-root',
-  imports: [MapComponent],
+  imports: [MapsComponent],
   template: `
     <h1>Mappa</h1>
-    <app-map
-      style="height: 500px"
+    <app-maps
+      style="height: 540px"
       [features]="features()"
+      [(filter)]="filter"
       (featureClick)="selected.set($event)"
     />
     @if (selected(); as f) {
@@ -19,6 +20,7 @@ import { MapFeature } from './map/map-feature.model';
   `,
 })
 export class App {
+  protected readonly filter = signal<MapsFilter>('ALL');
   protected readonly selected = signal<MapFeature | undefined>(undefined);
 
   protected readonly features = signal<MapFeature[]>([

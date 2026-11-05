@@ -7,6 +7,7 @@ che disegna tre tipologie grafiche: **POLYGON**, **POINT**, **MARKER**.
 
 - `src/app/map/map-feature.model.ts` – tipi `MapFeature` (POLYGON / POINT / MARKER)
 - `src/app/map/map.component.ts` – il componente mappa
+- `src/app/maps/maps.component.ts` – mappa con selettore Tutti / Poligoni / Bolle / Marcatori
 - `src/app/app.ts` – esempio d'uso
 
 ## Avvio rapido
@@ -54,3 +55,19 @@ features: MapFeature[] = [
 ```
 
 Input: `features`, `center`, `zoom`, `fitToFeatures`. Output: `featureClick`.
+
+## Mappa con selettore (`<app-maps>`)
+
+`<app-maps>` aggiunge sopra la mappa un selettore per scegliere quale tipologia visualizzare:
+**Tutti**, **Poligoni** (`POLYGON`), **Bolle** (`POINT`) o **Marcatori** (`MARKER`).
+Accanto a ogni opzione è indicato il numero di elementi.
+
+```html
+<app-maps style="height: 540px" [features]="features" [(filter)]="filter" (featureClick)="onClick($event)" />
+```
+
+```ts
+filter = signal<MapsFilter>('ALL'); // 'ALL' | 'POLYGON' | 'POINT' | 'MARKER'
+```
+
+Input: `features`, `filter` (two-way, default `'ALL'`). Output: `featureClick`.
