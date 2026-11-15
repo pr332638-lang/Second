@@ -1,0 +1,11 @@
+/* Stili globali del prototipo. Gli stili di Leaflet e di markercluster si includono da angular.json. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* Sicurezza contro regole generiche che deformano le tile di Leaflet (es. img { max-width: 100% }). */
+.leaflet-container img {
+  max-width: none !important;
+}

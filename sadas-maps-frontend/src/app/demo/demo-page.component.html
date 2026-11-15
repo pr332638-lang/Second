@@ -1,0 +1,142 @@
+<div class="demo">
+  <aside class="demo__side">
+    <header class="demo__head">
+      <h1>Componente Maps · prototipo</h1>
+      <p class="demo__badge">Dati simulati: aree e valori sono inventati</p>
+    </header>
+
+    <!-- Configurazione: al posto del SadasBI Manager -->
+    <section class="demo__box">
+      <label class="demo__field">
+        <span>Scenario</span>
+        <select #scenarioSelect (change)="selectScenario(scenarioSelect.value)">
+          @for (s of scenarios; track s.id) {
+            <option [value]="s.id" [selected]="s.id === scenarioId()">{{ s.title }}</option>
+          }
+        </select>
+      </label>
+      <p class="demo__hint">{{ scenario().description }}</p>
+    </section>
+
+    <!-- Filtro: al posto dell'elemento Parent -->
+    @switch (scenario().filter) {
+      @case ('macroarea') {
+        <section class="demo__box">
+          <label class="demo__field">
+            <span>Filtro Parent simulato: macroarea</span>
+            <select #macroSelect (change)="macroarea.set(macroSelect.value)">
+              <option value="" [selected]="macroarea() === ''">Tutte</option>
+              @for (m of macroaree; track m) {
+                <option [value]="m" [selected]="m === macroarea()">{{ m }}</option>
+              }
+            </select>
+          </label>
+          <p class="demo__hint">Passa alla mappa il parametro MACROAREA: la query viene rieseguita.</p>
+        </section>
+      }
+      @case ('regione') {
+        <section class="demo__box">
+          <label class="demo__field">
+            <span>Filtro Parent simulato: regione</span>
+            <select #regionSelect (change)="regione.set(+regionSelect.value)">
+              <option value="0" [selected]="regione() === 0">Nessuna (la PreQuery fallisce)</option>
+              @for (r of regions; track r.id) {
+                <option [value]="r.id" [selected]="r.id === regione()">{{ r.name }} ({{ r.macroarea }})</option>
+              }
+            </select>
+          </label>
+          <p class="demo__hint">Passa alla mappa il parametro REGIONE (IdArea della regione).</p>
+        </section>
+      }
+    }
+
+    <!-- Back-end: Java (cartella backend/) o simulato nel browser -->
+    <section class="demo__box">
+      <h2>Back-end</h2>
+      @if (backend.mode === 'java') {
+        <p class="demo__mode demo__mode--java">Java 21 · http://localhost:8080 (via proxy)</p>
+        <p class="demo__hint">
+          Avvialo con <code>mvn spring-boot:run</code> nella cartella backend. Senza Java:
+          <a [href]="otherModeHref()">usa il back-end simulato nel browser</a>.
+        </p>
+      } @else {
+        <p class="demo__mode">Simulato nel browser</p>
+        <label class="demo__field">
+          <span>Latenza di rete</span>
+          <select #latencySelect (change)="backend.latencyMs.set(+latencySelect.value)">
+            @for (l of latencies; track l) {
+              <option [value]="l" [selected]="l === backend.latencyMs()">{{ l }} ms</option>
+            }
+          </select>
+        </label>
+        <label class="demo__check">
+          <input #failCheck type="checkbox" [checked]="backend.failRequests()" (change)="backend.failRequests.set(failCheck.checked)" />
+          <span>Simula un errore del server</span>
+        </label>
+        <p class="demo__hint"><a [href]="otherModeHref()">Passa al back-end Java</a></p>
+      }
+    </section>
+
+    <!-- Clic: al posto dell'apertura di Page o HyperLink -->
+    <section class="demo__box">
+      <h2>Ultimo clic</h2>
+      @if (lastClick(); as c) {
+        <dl class="demo__params">
+          <dt>IDAREAMAP</dt><dd>{{ c.IDAREAMAP ?? '—' }}</dd>
+          <dt>IDMETRIC</dt><dd>{{ c.IDMETRIC ?? '—' }}</dd>
+          <dt>METR_LABEL</dt><dd>{{ c.METR_LABEL ?? '—' }}</dd>
+          <dt>METR_VALUE</dt><dd>{{ c.METR_VALUE ?? '—' }}</dd>
+          <dt>LABELMAP</dt><dd>{{ c.LABELMAP ?? '—' }}</dd>
+          <dt>LAT, LNG</dt><dd>{{ c.LAT | number: '1.5-5' }}, {{ c.LNG | number: '1.5-5' }}</dd>
+        </dl>
+        @if (c.record) {
+          <details>
+            <summary>Record selezionato</summary>
+            <pre>{{ c.record | json }}</pre>
+          </details>
+        }
+        <p class="demo__hint">In SadasBI questi parametri andrebbero alla pagina collegata (Page) o all'HyperLink.</p>
+      } @else {
+        <p class="demo__hint">Clicca un'area della mappa.</p>
+      }
+    </section>
+
+    <!-- Registro delle richieste: per le prove di prestazioni -->
+    <section class="demo__box demo__box--grow">
+      <div class="demo__log-head">
+        <h2>Richieste al back-end</h2>
+        <button type="button" (click)="backend.clearLog()">Svuota</button>
+      </div>
+      <p class="demo__hint">
+        {{ totals().requests }} richieste ({{ totals().geometryRequests }} di geometrie),
+        {{ totals().sizeKb | number: '1.0-0' }} KB in totale@if (totals().failed) {, {{ totals().failed }} fallite}
+      </p>
+      <ol class="demo__log">
+        @for (r of backend.log(); track $index) {
+          <li [class.demo__log-item--failed]="r.failed">
+            <span class="demo__log-kind">{{ r.kind }}</span>
+            <span class="demo__log-detail">{{ r.detail }}</span>
+            @if (r.failed) {
+              <span class="demo__log-meta">{{ r.error }} · {{ r.totalMs | number: '1.0-0' }} ms</span>
+            } @else {
+              <span class="demo__log-meta">
+                {{ r.items }} el. · {{ r.sizeKb | number: '1.0-0' }} KB · {{ r.totalMs | number: '1.0-0' }} ms
+                @if (r.serverMs !== null) {
+                  (server {{ r.serverMs | number: '1.0-0' }} ms)
+                }
+              </span>
+            }
+          </li>
+        } @empty {
+          <li class="demo__hint">Nessuna richiesta.</li>
+        }
+      </ol>
+    </section>
+  </aside>
+
+  <main class="demo__map">
+    @for (s of activeScenarios(); track s.id) {
+      <sadas-map [config]="s.config" [parentParams]="parentParams()" (areaClick)="onAreaClick($event)" />
+    }
+  </main>
+</div>

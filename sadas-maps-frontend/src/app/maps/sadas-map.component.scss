@@ -1,0 +1,230 @@
+// Come nel componente originale, senza Width/Height l'elemento occupa tutto lo spazio libero (100% x 100%).
+// Leaflet però richiede un'altezza definita: se il contenitore della pagina non ne ha una,
+// il 100% non si può calcolare e vale l'altezza minima qui sotto.
+:host {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 300px;
+
+  --sadas-map-surface: rgba(255, 255, 255, 0.94);
+  --sadas-map-text: #1f2933;
+  --sadas-map-muted: #5f6b76;
+  --sadas-map-border: #d9dee3;
+  --sadas-map-error: #b42318;
+  --sadas-map-focus: #1a73e8;
+}
+
+.sadas-map__frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--sadas-map-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sadas-map__header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sadas-map-border);
+  color: var(--sadas-map-text);
+}
+
+.sadas-map__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sadas-map__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.sadas-map__canvas {
+  position: absolute;
+  inset: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--sadas-map-focus);
+    outline-offset: -2px;
+  }
+}
+
+// Legenda a barra sotto la mappa, come nell'originale: non copre i dati.
+.sadas-map__legend {
+  display: block;
+  flex: none;
+  border-top: 1px solid var(--sadas-map-border);
+}
+
+// ---------------------------------------------------------------------------
+// Pannello dei livelli (in alto a destra; lo zoom di Leaflet è in alto a sinistra).
+// Sopra i pannelli di Leaflet, che arrivano a z-index 1000.
+// ---------------------------------------------------------------------------
+
+.sadas-map__panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1050;
+  width: 220px;
+  max-width: calc(100% - 70px);
+  max-height: calc(100% - 50px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px;
+  background: var(--sadas-map-surface);
+  color: var(--sadas-map-text);
+  font-size: 12px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
+
+  button,
+  select,
+  input {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--sadas-map-focus);
+    outline-offset: 1px;
+  }
+}
+
+.sadas-map__panel-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sadas-map__panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 10px 10px;
+}
+
+.sadas-map__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  select {
+    padding: 3px 4px;
+  }
+}
+
+.sadas-map__areas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.sadas-map__areas-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sadas-map__areas-actions {
+  display: flex;
+  gap: 6px;
+
+  button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--sadas-map-focus);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
+
+.sadas-map__area-search {
+  padding: 3px 6px;
+  border: 1px solid var(--sadas-map-border);
+  border-radius: 3px;
+}
+
+.sadas-map__area-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    cursor: pointer;
+  }
+}
+
+.sadas-map__area-empty {
+  color: var(--sadas-map-muted);
+  padding: 2px 0;
+}
+
+.sadas-map__area-more {
+  margin: 6px 0 0;
+  color: var(--sadas-map-muted);
+  font-size: 12px;
+}
+
+// ---------------------------------------------------------------------------
+// Messaggi
+// ---------------------------------------------------------------------------
+
+.sadas-map__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  background: var(--sadas-map-surface);
+  color: var(--sadas-map-text);
+  font-size: 14px;
+
+  // Indicatore di caricamento: in alto al centro, lascia libero il pannello dei livelli.
+  &--soft {
+    inset: 10px auto auto 50%;
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  &--error {
+    color: var(--sadas-map-error);
+  }
+}
+
+.sadas-map__notice {
+  position: absolute;
+  right: 10px;
+  bottom: 24px; // sopra l'attribuzione
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--sadas-map-surface);
+  color: var(--sadas-map-text);
+  font-size: 12px;
+}

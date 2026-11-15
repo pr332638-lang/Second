@@ -1,0 +1,120 @@
+<div class="sadas-map__frame">
+  @if (config().title; as title) {
+    <header class="sadas-map__header">
+      <h2 class="sadas-map__title">{{ title }}</h2>
+    </header>
+  }
+
+  <div class="sadas-map__stage">
+    <div
+      #mapHost
+      class="sadas-map__canvas"
+      role="region"
+      [attr.tabindex]="config().tabIndex ?? 0"
+      [attr.aria-label]="config().title || 'Mappa'"
+    ></div>
+
+    @if (showPanel()) {
+      <section class="sadas-map__panel" aria-label="Livelli della mappa">
+        <button
+          type="button"
+          class="sadas-map__panel-toggle"
+          [attr.aria-expanded]="panelOpen()"
+          (click)="panelOpen.set(!panelOpen())"
+        >
+          <span>Livelli</span>
+          <span aria-hidden="true">{{ panelOpen() ? '−' : '+' }}</span>
+        </button>
+
+        @if (panelOpen()) {
+          <div class="sadas-map__panel-body">
+            @if (metrics().length > 1) {
+              <label class="sadas-map__field">
+                <span>Metrica</span>
+                <select #metricSelect (change)="selectMetric(+metricSelect.value)">
+                  @for (m of metrics(); track m.idMetric; let i = $index) {
+                    <option [value]="i" [selected]="i === metricIndex()">{{ m.name }}</option>
+                  }
+                </select>
+              </label>
+            }
+
+            @if (areaItems().length > 0) {
+              <div class="sadas-map__areas">
+                <div class="sadas-map__areas-head">
+                  <span>Aree</span>
+                  <span class="sadas-map__areas-actions">
+                    <button type="button" (click)="setAllAreasVisible(true)">Tutte</button>
+                    <button type="button" (click)="setAllAreasVisible(false)">Nessuna</button>
+                  </span>
+                </div>
+
+                @if (showAreaFilter()) {
+                  <input
+                    #areaSearch
+                    type="search"
+                    class="sadas-map__area-search"
+                    placeholder="Cerca area…"
+                    aria-label="Cerca area"
+                    [value]="areaFilter()"
+                    (input)="areaFilter.set(areaSearch.value)"
+                  />
+                }
+
+                <ul class="sadas-map__area-list">
+                  @for (item of visibleAreaItems(); track item.key) {
+                    <li>
+                      <label>
+                        <input
+                          #areaCheck
+                          type="checkbox"
+                          [checked]="isAreaVisible(item.key)"
+                          (change)="setAreaVisible(item.key, areaCheck.checked)"
+                        />
+                        <span>{{ item.label }}</span>
+                      </label>
+                    </li>
+                  } @empty {
+                    <li class="sadas-map__area-empty">Nessuna area trovata</li>
+                  }
+                </ul>
+                @if (hiddenListCount() > 0) {
+                  <p class="sadas-map__area-more">
+                    Altre {{ hiddenListCount() }} aree non elencate: usa la ricerca per trovarle.
+                  </p>
+                }
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
+    @switch (status()) {
+      @case ('loading') {
+        <div class="sadas-map__overlay sadas-map__overlay--soft" aria-live="polite">Caricamento…</div>
+      }
+      @case ('blocked') {
+        <div class="sadas-map__overlay" role="status">{{ message() }}</div>
+      }
+      @case ('error') {
+        <div class="sadas-map__overlay sadas-map__overlay--error" role="alert">{{ message() }}</div>
+      }
+    }
+
+    @if (unmatched() > 0 || notice()) {
+      <div class="sadas-map__notice" role="status">
+        @if (unmatched() > 0) {
+          <span>{{ unmatched() }} record senza area corrispondente</span>
+        }
+        @if (notice(); as n) {
+          <span>{{ n }}</span>
+        }
+      </div>
+    }
+  </div>
+
+  @if (legend(); as l) {
+    <sadas-map-legend class="sadas-map__legend" [model]="l" />
+  }
+</div>

@@ -71,3 +71,14 @@ filter = signal<MapsFilter>('ALL'); // 'ALL' | 'POLYGON' | 'POINT' | 'MARKER'
 ```
 
 Input: `features`, `filter` (two-way, default `'ALL'`). Output: `featureClick`.
+
+## Componente Maps SadasBI (`sadas-maps-frontend/`)
+
+Prototipo completo del componente `<sadas-map>` (Leaflet + markercluster, dati simulati):
+vedi [`sadas-maps-frontend/README.md`](sadas-maps-frontend/README.md).
+
+```bash
+cd sadas-maps-frontend
+npm install
+npm start          # http://localhost:4200/?backend=simulato senza il back-end Java
+```
