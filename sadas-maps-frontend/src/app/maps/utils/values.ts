@@ -1,4 +1,5 @@
 import type { QueryRow } from '../maps.models';
+import { areaKey } from './geometry-cache';
 
 /**
  * Converte un valore della query in numero.
@@ -62,9 +63,9 @@ export function fieldName(ref: string | undefined): string | undefined {
 
 /** Legge l'IdArea da una riga; null se il campo manca o è vuoto. */
 export function idOf(row: QueryRow, ref: string | undefined): string | null {
-  const v = fieldValue(row, ref);
-  if (v === null || v === undefined || v === '') return null;
-  return String(v);
+  // Stessa normalizzazione della memoria delle geometrie: " 1203" e "1203.0" diventano "1203",
+  // così la riga si collega alla sua geometria.
+  return areaKey(fieldValue(row, ref));
 }
 
 function formatRaw(value: unknown): string {

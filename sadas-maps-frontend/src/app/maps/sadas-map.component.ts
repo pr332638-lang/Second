@@ -531,7 +531,7 @@ export class SadasMapComponent {
 
     for (const row of rows) {
       const id = idOf(row, config.fieldKeyForPolygons);
-      if (id === null || this.data.isMissing(scope, id)) {
+      if (id === null || this.data.isMissing(scope, id, level)) {
         unmatched++;
         continue;
       }
@@ -657,7 +657,7 @@ export class SadasMapComponent {
 
     const scope = this.scope();
     const id = idOf(row, config.fieldKeyForPoint);
-    if (id === null || this.data.isMissing(scope, id)) return { kind: 'missing' };
+    if (id === null || this.data.isMissing(scope, id, 'POINT')) return { kind: 'missing' };
     const feature = this.data.getGeometry(scope, id, 'POINT');
     if (!feature) return { kind: 'pending' };
     if (feature.geometry.type !== 'Point') return { kind: 'missing' };

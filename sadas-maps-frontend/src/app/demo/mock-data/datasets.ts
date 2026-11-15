@@ -247,8 +247,10 @@ export function runMockQuery(componentId: string, params: Readonly<Record<string
 /**
  * Geometrie simulate, con le stesse regole proposte per il back-end vero:
  * - POINT → punti centrali, L0–L3 → confini al livello di dettaglio richiesto;
- * - con il bbox si restituiscono solo i confini che lo intersecano;
- * - gli IdArea inesistenti finiscono in `notFound`, come numeri (IdArea è un intero nel database).
+ * - con il bbox si restituiscono solo i confini che lo intersecano; per gli altri si manda in `outside`
+ *   il rettangolo, così il front-end non li richiede finché la vista non li raggiunge;
+ * - gli IdArea inesistenti (o del tipo sbagliato) finiscono in `notFound`, come numeri
+ *   (IdArea è un intero nel database).
  */
 export function runMockGeometries(
   ids: readonly (string | number)[],
@@ -257,6 +259,7 @@ export function runMockGeometries(
 ): GeometriesResponse {
   const features: GeometriesResponse['features'] = [];
   const notFound: number[] = [];
+  const outside: Record<string, [number, number, number, number]> = {};
   for (const raw of ids) {
     const id = Number(raw);
     const feature = Number.isInteger(id) ? featureFor(id, level) : null;
@@ -264,8 +267,14 @@ export function runMockGeometries(
       if (Number.isInteger(id)) notFound.push(id);
       continue;
     }
-    if (level !== 'POINT' && bbox && bbox.length === 4 && !bboxIntersects(bboxOf(feature), bbox)) continue;
+    if (level !== 'POINT' && bbox && bbox.length === 4) {
+      const extent = bboxOf(feature);
+      if (!bboxIntersects(extent, bbox)) {
+        outside[String(id)] = extent;
+        continue;
+      }
+    }
     features.push(feature);
   }
-  return { type: 'FeatureCollection', features, notFound };
+  return { type: 'FeatureCollection', features, notFound, outside };
 }

@@ -283,14 +283,23 @@ e `_2015`). Per questo le geometrie si chiedono per componente: il back-end le l
     { "type": "Feature", "id": 1203, "properties": { "label": "Milano" },
       "geometry": { "type": "MultiPolygon", "coordinates": [[[[9.1, 45.4], "..."]]] } }
   ],
-  "notFound": [9999]
+  "notFound": [9999],
+  "outside": { "1300": [12.1, 41.6, 12.9, 42.1] }
 }
 ```
 
 `id` e `notFound` sono numeri, perché IdArea è un intero nel database (un IdArea non numerico finisce in
 `notFound` come testo); il front-end li tratta comunque come testo. Un IdArea chiesto con il livello sbagliato
-(un confine con `POINT`, un punto con L0–L3) è in `notFound`. Le aree fuori dal bbox non sono in `notFound`:
-semplicemente non si vedono.
+(un confine con `POINT`, un punto con L0–L3) è in `notFound`; il front-end ricorda gli IdArea inesistenti
+separatamente per punti e confini, così un errore di configurazione sui punti non nasconde i confini.
+
+Le aree esistenti ma fuori dal bbox non sono in `notFound`: sono in `outside`, con il loro rettangolo
+[ovest, sud, est, nord] preso da POLYGONS_SBI. Il front-end lo ricorda e richiede l'area solo quando la vista
+la raggiunge, invece di richiederla a ogni spostamento. Con tutti i comuni, `outside` pesa qualche centinaio
+di KB la prima volta, poi non si ripete.
+
+Il front-end manda al massimo 5.000 IdArea per richiesta (`MAX_IDS_PER_REQUEST`), in blocchi scaricati
+due alla volta; il back-end ne accetta fino a 20.000.
 
 Errori: 404 per un componente sconosciuto, 400 per richieste non valide (livello inesistente, bbox con meno
 di 4 valori, più di 20.000 IdArea), in formato Problem Details (RFC 9457) con il messaggio nel campo `detail`.
@@ -301,7 +310,7 @@ Compiti del back-end:
 - costruire le geometrie unendo i confini esterni e sottraendo i buchi (vedi *Costruzione delle geometrie*);
 - restituire le versioni semplificate del livello richiesto, precalcolate (vedi *Semplificazione per livello di zoom*);
 - limitare le coordinate a 5 decimali e rispondere con gzip;
-- elencare in `notFound` gli IdArea inesistenti.
+- elencare in `notFound` gli IdArea inesistenti e in `outside` il rettangolo delle aree fuori dal bbox.
 
 ## Prestazioni (caso con migliaia o decine di migliaia di record)
 

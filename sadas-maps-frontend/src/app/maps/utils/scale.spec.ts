@@ -107,6 +107,9 @@ describe('riferimenti ai campi', () => {
   it('usa i riferimenti per IdArea e valore della metrica', () => {
     expect(idOf(row, '${F.IDAREA_REGIONE}')).toBe('15');
     expect(idOf(row, '${F.MANCANTE}')).toBeNull();
+    // Stessa chiave della memoria delle geometrie: spazi e ".0" non impediscono il collegamento.
+    expect(idOf({ ID: ' 1203 ' }, '${F.ID}')).toBe('1203');
+    expect(idOf({ ID: '1203.0' }, '${F.ID}')).toBe('1203');
     const m = { ...metric, currentValueField: '${F.POPOLAZIONE}', minValue: 0, maxValue: 10_000_000 };
     expect(resolveRange(m, [row])).toEqual({ min: 0, max: 10_000_000 });
     expect(styleFor(row, { ...m, minValue: undefined, maxValue: undefined }, { min: 0, max: 5_801_692 }).radius).toBe(24);

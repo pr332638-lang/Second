@@ -118,6 +118,9 @@ describe('back-end simulato', () => {
     const res = runMockGeometries(['1001', '1020'], 'L1', [-80, 10, -70, 20]);
     expect(res.features.length).toBe(0);
     expect(res.notFound?.length).toBe(0);
+    // ...ma ne manda il rettangolo, per non farli richiedere a ogni spostamento.
+    expect(Object.keys(res.outside ?? {}).sort()).toEqual(['1001', '1020']);
+    expect(res.outside?.['1001']?.length).toBe(4);
   });
   it('la query delle regioni contiene anche una riga con un IdArea inesistente', () => {
     const res = runMockQuery(DEMO_IDS.regioni, {});

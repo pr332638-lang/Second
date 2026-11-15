@@ -1,13 +1,18 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, InjectionToken, inject } from '@angular/core';
-import { Observable, map, of } from 'rxjs';
+import { Observable, from, map, mergeMap, of } from 'rxjs';
 import type { GeometryLevel, MapsQueryResult } from '../maps.models';
 import { POLYGON_LEVELS, type Bbox } from '../utils/geo';
 import {
   areaKey,
+  chunk,
+  emptyKnowledge,
+  idsToRequest,
   mergeGeometriesResponse,
   type AreaFeature,
   type GeometriesResponse,
+  type GeometryKind,
+  type GeometryKnowledge,
 } from '../utils/geometry-cache';
 
 export type { AreaFeature } from '../utils/geometry-cache';
@@ -30,9 +35,21 @@ export interface GeometryScope {
   connection?: string;
 }
 
+/**
+ * IdArea al massimo per richiesta. Il back-end ne accetta fino a 20.000; blocchi più piccoli
+ * tengono leggere le singole risposte e permettono di scaricarle in parallelo.
+ */
+export const MAX_IDS_PER_REQUEST = 5000;
+/** Richieste di blocchi in corso contemporaneamente. */
+const PARALLEL_REQUESTS = 2;
+
 interface ScopeCache {
   levels: Map<GeometryLevel, Map<string, AreaFeature>>;
-  notFound: Set<string>;
+  knowledge: GeometryKnowledge;
+}
+
+function kindOf(level: GeometryLevel): GeometryKind {
+  return level === 'POINT' ? 'POINT' : 'POLYGON';
 }
 
 /**
@@ -56,10 +73,13 @@ export class MapsDataService {
     );
   }
 
-  /** true se il back-end ha già detto che l'IdArea non esiste su quella connessione. */
-  isMissing(scope: GeometryScope, id: string | number): boolean {
+  /**
+   * true se il back-end ha già detto che l'IdArea non esiste su quella connessione come punto
+   * (level POINT) o come confine (L0–L3).
+   */
+  isMissing(scope: GeometryScope, id: string | number, level: GeometryLevel): boolean {
     const key = areaKey(id);
-    return key !== null && this.cacheFor(scope).notFound.has(key);
+    return key !== null && this.cacheFor(scope).knowledge.notFound[kindOf(level)].has(key);
   }
 
   /**
@@ -81,8 +101,12 @@ export class MapsDataService {
 
   /**
    * Scarica le geometrie mancanti. Per i poligoni si passa il bbox della vista corrente:
-   * il back-end restituisce solo quelle che lo intersecano.
-   * Emette true se la cache è cambiata (serve ridisegnare), false altrimenti.
+   * il back-end restituisce solo quelle che lo intersecano e, per le altre, il loro rettangolo.
+   * Le aree già note come fuori vista non si richiedono finché la vista non le raggiunge.
+   * Gli IdArea si mandano in blocchi di MAX_IDS_PER_REQUEST.
+   * Emette un valore per ogni blocco arrivato: true se la cache è cambiata (serve ridisegnare).
+   * Così le aree compaiono man mano, e un blocco già arrivato viene disegnato anche se le richieste
+   * successive vengono annullate (per esempio perché la mappa si è spostata di nuovo).
    */
   loadGeometries(
     scope: GeometryScope,
@@ -92,24 +116,29 @@ export class MapsDataService {
   ): Observable<boolean> {
     const cache = this.cacheFor(scope);
     const levelCache = this.levelCache(cache, level);
+    const kind = kindOf(level);
     const keys = ids.map(areaKey).filter((k): k is string => k !== null);
-    const missing = [...new Set(keys)].filter((id) => !levelCache.has(id) && !cache.notFound.has(id));
+    const missing = idsToRequest(keys, levelCache, cache.knowledge, kind, kind === 'POLYGON' ? bbox : undefined);
     if (missing.length === 0) return of(false);
 
-    return this.http
-      .post<GeometriesResponse>(
-        `${this.baseUrl}/components/${encodeURIComponent(scope.componentId)}/geometries`,
-        { ids: missing, level, bbox },
-      )
-      // IdArea sempre convertiti in testo: vedi mergeGeometriesResponse.
-      .pipe(map((response) => mergeGeometriesResponse(levelCache, cache.notFound, response)));
+    const url = `${this.baseUrl}/components/${encodeURIComponent(scope.componentId)}/geometries`;
+    return from(chunk(missing, MAX_IDS_PER_REQUEST)).pipe(
+      mergeMap(
+        (block) =>
+          this.http
+            .post<GeometriesResponse>(url, { ids: block, level, bbox })
+            // IdArea sempre convertiti in testo: vedi mergeGeometriesResponse.
+            .pipe(map((response) => mergeGeometriesResponse(levelCache, cache.knowledge, kind, response))),
+        PARALLEL_REQUESTS,
+      ),
+    );
   }
 
   private cacheFor(scope: GeometryScope): ScopeCache {
     const key = scope.connection ? `conn:${scope.connection}` : `comp:${scope.componentId}`;
     let c = this.caches.get(key);
     if (!c) {
-      c = { levels: new Map(), notFound: new Set() };
+      c = { levels: new Map(), knowledge: emptyKnowledge() };
       this.caches.set(key, c);
     }
     return c;
