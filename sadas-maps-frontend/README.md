@@ -372,6 +372,10 @@ decodificare il GeoJSON in un Web Worker.
 14. IdArea: nell'originale è un intero; il front-end lo tratta come stringa, quindi accetta entrambi.
 15. Numeri come stringhe: virgola decimale e punti delle migliaia (`5.801.692`) vengono riconosciuti;
     un solo punto senza virgola (`45.46`) è considerato decimale.
+    Nei popup e nei tooltip, invece, un testo si riformatta all'italiana solo se contiene già dei separatori
+    (virgola decimale, o almeno due punti delle migliaia), conservando tutti i suoi decimali: `"45,46123"`
+    resta `45,46123`. Gli altri testi si mostrano come sono, così codici come CAP, telefoni e partite IVA
+    (`"20121"`) non diventano `20.121`, e un testo ambiguo come `"12.345"` non viene interpretato.
 
 ## Costruzione delle geometrie (dal componente originale)
 

@@ -80,21 +80,45 @@ export function escapeHtml(text: string): string {
 const numberFormat = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
 
 /**
- * Testo che rappresenta un numero: cifre con eventuali punti e virgola, senza zeri iniziali.
- * Gli zeri iniziali escludono i codici ("015146", "00123"), che vanno mostrati come sono.
+ * Testi che sono senza dubbio numeri scritti all'italiana, perché contengono già dei separatori:
+ * - virgola decimale, con o senza punti delle migliaia in gruppi di tre ("45,4612", "12.345,5", "0,5");
+ * - almeno due punti delle migliaia in gruppi di tre ("5.801.692").
+ * Tutti gli altri testi si mostrano come sono: codici e identificativi ("20121", "015146", "3331234567"),
+ * testi con un solo punto e senza virgola ("12.345" può voler dire dodicimila o dodici virgola tre)
+ * e testi malformati ("1..2", "1.2.3,4").
  */
-const NUMERIC_TEXT = /^-?(?:0|[1-9][\d.]*)(?:,\d+)?$|^-?(?:0|[1-9]\d*)\.\d+$/;
+const DECIMAL_COMMA_TEXT = /^-?(?:0|[1-9]\d*|[1-9]\d{0,2}(?:\.\d{3})+),(\d+)$/;
+const THOUSANDS_TEXT = /^-?[1-9]\d{0,2}(?:\.\d{3}){2,}$/;
+
+/** Formattatori per numero di decimali, creati una volta sola. */
+const textNumberFormats = new Map<number, Intl.NumberFormat>();
+
+function textNumberFormat(decimals: number): Intl.NumberFormat {
+  let format = textNumberFormats.get(decimals);
+  if (!format) {
+    format = new Intl.NumberFormat('it-IT', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    textNumberFormats.set(decimals, format);
+  }
+  return format;
+}
 
 /**
- * Valore pronto da mostrare: numeri all'italiana con al massimo due decimali ("5.801.692", "12,35"),
- * anche se arrivano come testo; valori assenti o non validi (NaN, Infinity) come testo vuoto.
+ * Valore pronto da mostrare; valori assenti o non validi (NaN, Infinity) diventano testo vuoto.
+ * - Numeri: all'italiana, con al massimo due decimali (5801692 → "5.801.692").
+ * - Testi con separatori (vedi sopra): all'italiana, con tutti i decimali scritti nel testo,
+ *   senza arrotondare (coordinate come "45,46123" restano precise).
+ * - Tutti gli altri testi: come sono.
  */
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number') return Number.isFinite(value) ? numberFormat.format(value) : '';
-  if (typeof value === 'string' && NUMERIC_TEXT.test(value.trim())) {
-    const n = toNumber(value);
-    if (Number.isFinite(n)) return numberFormat.format(n);
+  if (typeof value === 'string') {
+    const text = value.trim();
+    const decimals = DECIMAL_COMMA_TEXT.exec(text)?.[1].length ?? (THOUSANDS_TEXT.test(text) ? 0 : undefined);
+    if (decimals !== undefined) {
+      const n = toNumber(text);
+      if (Number.isFinite(n)) return textNumberFormat(decimals).format(n);
+    }
   }
   return String(value);
 }

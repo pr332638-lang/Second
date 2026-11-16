@@ -91,17 +91,45 @@ describe('utilità sui valori', () => {
     const html = renderTemplate('${F.NOME}|${F.VUOTO}|${F.NOMEE}|${P.MANCA}', { NOME: 'Roma', VUOTO: null });
     expect(html).toBe('Roma||${F.NOMEE}|${P.MANCA}');
   });
-  it('nei popup formatta i numeri anche se arrivano come testo', () => {
-    expect(renderTemplate('${F.POP}', { POP: '5801692' })).toBe('5.801.692');
+  it('nei popup formatta i numeri e i testi con separatori, non i codici', () => {
+    expect(renderTemplate('${F.POP}', { POP: 5801692 })).toBe('5.801.692');
+    expect(renderTemplate('${F.POP}', { POP: '5.801.692' })).toBe('5.801.692');
+    expect(renderTemplate('${F.CAP}', { CAP: '20121' })).toBe('20121');
   });
-  it('formatValue: numeri all’italiana, codici con zeri iniziali come sono, NaN vuoto', () => {
+  it('formatValue: numeri all’italiana, NaN e null vuoti', () => {
     expect(formatValue(5801692)).toBe('5.801.692');
-    expect(formatValue('5801692')).toBe('5.801.692');
-    expect(formatValue('12.345,5')).toBe('12.345,5');
-    expect(formatValue('015146')).toBe('015146');
-    expect(formatValue('Napoli')).toBe('Napoli');
+    expect(formatValue(12.345)).toBe('12,35');
     expect(formatValue(Number.NaN)).toBe('');
+    expect(formatValue(Number.POSITIVE_INFINITY)).toBe('');
     expect(formatValue(null)).toBe('');
+    expect(formatValue(undefined)).toBe('');
+  });
+  it('formatValue: testi con separatori all’italiana, con tutti i loro decimali', () => {
+    expect(formatValue('12.345,5')).toBe('12.345,5');
+    expect(formatValue('12345,5')).toBe('12.345,5');
+    // come per i numeri, in italiano il punto delle migliaia compare da 5 cifre
+    expect(formatValue('1234,5')).toBe('1234,5');
+    expect(formatValue('5.801.692')).toBe('5.801.692');
+    expect(formatValue(' 0,5 ')).toBe('0,5');
+    expect(formatValue('-12.345,50')).toBe('-12.345,50');
+    // coordinate: nessun arrotondamento a due decimali
+    expect(formatValue('45,46123')).toBe('45,46123');
+  });
+  it('formatValue: codici, testi ambigui e malformati restano come sono', () => {
+    // codici e identificativi, con o senza zeri iniziali
+    expect(formatValue('015146')).toBe('015146');
+    expect(formatValue('20121')).toBe('20121');
+    expect(formatValue('3331234567')).toBe('3331234567');
+    expect(formatValue('12345678901')).toBe('12345678901');
+    // un solo punto senza virgola: dodicimila o dodici virgola tre?
+    expect(formatValue('12.345')).toBe('12.345');
+    expect(formatValue('9.18765')).toBe('9.18765');
+    // separatori in posizioni non valide
+    expect(formatValue('1..2')).toBe('1..2');
+    expect(formatValue('1.')).toBe('1.');
+    expect(formatValue('1.2.3,4')).toBe('1.2.3,4');
+    expect(formatValue('12.34.567')).toBe('12.34.567');
+    expect(formatValue('Napoli')).toBe('Napoli');
   });
   it('interpola i colori esadecimali corti', () => {
     expect(interpolateColor('#000', '#fff', 1)).toBe('#ffffff');
