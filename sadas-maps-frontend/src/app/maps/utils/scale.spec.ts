@@ -114,6 +114,9 @@ describe('utilità sui valori', () => {
     expect(formatValue('-12.345,50')).toBe('-12.345,50');
     // coordinate: nessun arrotondamento a due decimali
     expect(formatValue('45,46123')).toBe('45,46123');
+    // troppi decimali: limitati a 20 invece di mandare in errore Intl.NumberFormat
+    // (oltre la 17ª cifra le cifre sono quelle del double, quindi si controlla solo la lunghezza)
+    expect(formatValue('0,' + '1'.repeat(150)).length).toBe('0,'.length + 20);
   });
   it('formatValue: codici, testi ambigui e malformati restano come sono', () => {
     // codici e identificativi, con o senza zeri iniziali

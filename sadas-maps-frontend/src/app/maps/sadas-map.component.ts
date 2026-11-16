@@ -18,6 +18,7 @@ import { EMPTY, Subject, catchError, debounceTime, of, switchMap } from 'rxjs';
 
 import { MapLegendComponent } from './legend/map-legend.component';
 import type {
+  GeometryLevel,
   LegendModel,
   MapClickParams,
   MapMetric,
@@ -163,6 +164,13 @@ export class SadasMapComponent {
   private readonly selectedMetric = signal(0);
   private readonly mapReady = signal(false);
   private readonly geometryVersion = signal(0);
+  /**
+   * Livello di dettaglio dei confini per lo zoom corrente (L0–L3), aggiornato a ogni fine zoom.
+   * Il disegno dei poligoni dipende da questo signal: cambiando zoom si ridisegna con il livello giusto
+   * anche quando le sue geometrie sono già in memoria e non c'è nulla da scaricare.
+   * Gli zoom dentro lo stesso livello non cambiano il valore, quindi non ridisegnano.
+   */
+  private readonly detailLevel = signal<GeometryLevel>(detailLevelForZoom(DEFAULT_ZOOM));
 
   protected readonly metrics = computed(() => this.config().metrics ?? []);
   protected readonly metricIndex = computed(() =>
@@ -320,8 +328,10 @@ export class SadasMapComponent {
       const rows = this.rows();
       const range = this.range();
       const hidden = this.hiddenAreas();
+      // Il livello conta solo per i poligoni: bolle e marcatori non si ridisegnano cambiando zoom.
+      const level = metric?.displayType === 'POLYGON' ? this.detailLevel() : null;
       this.geometryVersion();
-      untracked(() => this.render(config, metric, rows, range, hidden));
+      untracked(() => this.render(config, metric, rows, range, hidden, level));
     });
 
     inject(DestroyRef).onDestroy(() => {
@@ -385,6 +395,7 @@ export class SadasMapComponent {
       preferCanvas: true,
     });
     this.map = map;
+    this.detailLevel.set(detailLevelForZoom(map.getZoom()));
 
     // Mappa di base: solo OpenStreetMap. Se le tile non arrivano (rete chiusa, server non raggiungibile)
     // i dati restano visibili e si mostra un avviso, che sparisce alla prima tile caricata.
@@ -399,6 +410,7 @@ export class SadasMapComponent {
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
     map.on('click', (e: L.LeafletMouseEvent) => this.onMapClick(e));
+    map.on('zoomend', () => this.detailLevel.set(detailLevelForZoom(map.getZoom())));
     map.on('moveend', () => this.geometryNeeded$.next());
 
     // La mappa deve ricalcolare le dimensioni se il contenitore cambia (tab, pannelli, percentuali).
@@ -483,6 +495,7 @@ export class SadasMapComponent {
     allRows: readonly QueryRow[],
     range: ValueRange | null,
     hidden: ReadonlySet<string>,
+    level: GeometryLevel | null,
   ): void {
     const map = this.map;
     if (!map) return;
@@ -507,7 +520,7 @@ export class SadasMapComponent {
 
     const built =
       metric.displayType === 'POLYGON'
-        ? this.buildPolygons(config, metric, rows, range, map.getZoom())
+        ? this.buildPolygons(config, metric, rows, range, level ?? detailLevelForZoom(map.getZoom()))
         : metric.displayType === 'BUBBLE'
           ? this.buildBubbles(config, metric, rows, range)
           : this.buildMarkers(config, metric, rows);
@@ -521,10 +534,9 @@ export class SadasMapComponent {
     metric: MapMetric,
     rows: readonly QueryRow[],
     range: ValueRange,
-    zoom: number,
+    level: GeometryLevel,
   ): BuiltLayer {
     const scope = this.scope();
-    const level = detailLevelForZoom(zoom);
     const rowById = new Map<string, QueryRow>();
     const features: AreaFeature[] = [];
     let unmatched = 0;

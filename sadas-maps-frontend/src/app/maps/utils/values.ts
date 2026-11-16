@@ -90,6 +90,9 @@ const numberFormat = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }
 const DECIMAL_COMMA_TEXT = /^-?(?:0|[1-9]\d*|[1-9]\d{0,2}(?:\.\d{3})+),(\d+)$/;
 const THOUSANDS_TEXT = /^-?[1-9]\d{0,2}(?:\.\d{3}){2,}$/;
 
+/** Decimali mostrati al massimo per i numeri scritti come testo. */
+const MAX_TEXT_DECIMALS = 20;
+
 /** Formattatori per numero di decimali, creati una volta sola. */
 const textNumberFormats = new Map<number, Intl.NumberFormat>();
 
@@ -114,10 +117,11 @@ export function formatValue(value: unknown): string {
   if (typeof value === 'number') return Number.isFinite(value) ? numberFormat.format(value) : '';
   if (typeof value === 'string') {
     const text = value.trim();
-    const decimals = DECIMAL_COMMA_TEXT.exec(text)?.[1].length ?? (THOUSANDS_TEXT.test(text) ? 0 : undefined);
+    const decimals = DECIMAL_COMMA_TEXT.exec(text)?.[1]?.length ?? (THOUSANDS_TEXT.test(text) ? 0 : undefined);
     if (decimals !== undefined) {
       const n = toNumber(text);
-      if (Number.isFinite(n)) return textNumberFormat(decimals).format(n);
+      // Intl.NumberFormat accetta al massimo 100 decimali; oltre 15-17 cifre un double non ha comunque precisione.
+      if (Number.isFinite(n)) return textNumberFormat(Math.min(decimals, MAX_TEXT_DECIMALS)).format(n);
     }
   }
   return String(value);

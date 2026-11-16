@@ -84,7 +84,7 @@ export interface MapsConfig {
   fieldLatitude?: string;
   fieldLongitude?: string;
 
-  metrics: MapMetric[];
+  metrics: readonly MapMetric[];
 
   /**
    * false se il campo Query è vuoto: la mappa non esegue una query propria
@@ -119,9 +119,13 @@ export type QueryRow = Readonly<Record<string, unknown>>;
  */
 export interface MapsQueryResult {
   preQueryOk: boolean;
-  /** Messaggio della PreQuery fallita. */
-  message?: string;
-  rows: QueryRow[];
+  /**
+   * Messaggio della PreQuery fallita. Può essere null: il back-end Java lo manda sempre,
+   * anche quando la PreQuery è andata bene.
+   */
+  message?: string | null;
+  /** Righe in sola lettura: possono arrivare dal Parent ed essere condivise con altri elementi. */
+  rows: readonly QueryRow[];
 }
 
 /** Parametri passati alla pagina collegata o al Parent al clic sulla mappa. */
