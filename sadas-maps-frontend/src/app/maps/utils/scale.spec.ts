@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MapMetric } from '../maps.models';
 import { interpolateColor, normalize, resolveRange, styleFor } from './scale';
-import { fieldValue, idOf, renderTemplate, toCssSize, toNumber } from './values';
+import { fieldValue, formatValue, idOf, renderTemplate, toCssSize, toNumber } from './values';
 
 const metric: MapMetric = {
   idMetric: 'M1',
@@ -87,6 +87,22 @@ describe('utilità sui valori', () => {
     const html = renderTemplate('${F.NOME} (${P.ANNO}) ${ALTRO}', { NOME: 'Napoli' }, { ANNO: 2026 });
     expect(html).toBe('Napoli (2026) ${ALTRO}');
   });
+  it('nei popup lascia visibili i campi inesistenti, ma svuota quelli vuoti', () => {
+    const html = renderTemplate('${F.NOME}|${F.VUOTO}|${F.NOMEE}|${P.MANCA}', { NOME: 'Roma', VUOTO: null });
+    expect(html).toBe('Roma||${F.NOMEE}|${P.MANCA}');
+  });
+  it('nei popup formatta i numeri anche se arrivano come testo', () => {
+    expect(renderTemplate('${F.POP}', { POP: '5801692' })).toBe('5.801.692');
+  });
+  it('formatValue: numeri all’italiana, codici con zeri iniziali come sono, NaN vuoto', () => {
+    expect(formatValue(5801692)).toBe('5.801.692');
+    expect(formatValue('5801692')).toBe('5.801.692');
+    expect(formatValue('12.345,5')).toBe('12.345,5');
+    expect(formatValue('015146')).toBe('015146');
+    expect(formatValue('Napoli')).toBe('Napoli');
+    expect(formatValue(Number.NaN)).toBe('');
+    expect(formatValue(null)).toBe('');
+  });
   it('interpola i colori esadecimali corti', () => {
     expect(interpolateColor('#000', '#fff', 1)).toBe('#ffffff');
   });
@@ -121,6 +137,11 @@ describe('dimensioni', () => {
     expect(toCssSize(500, '100%')).toBe('500px');
     expect(toCssSize('100%', '400px')).toBe('100%');
     expect(toCssSize(undefined, '100%')).toBe('100%');
+    // Numeri scritti come testo, come da una configurazione XML.
+    expect(toCssSize('400', '100%')).toBe('400px');
+    expect(toCssSize(' 250.5 ', '100%')).toBe('250.5px');
+    expect(toCssSize('  ', '100%')).toBe('100%');
+    expect(toCssSize(Number.NaN, '100%')).toBe('100%');
   });
 });
 

@@ -53,14 +53,6 @@ export function fieldValue(row: QueryRow, ref: string | undefined, params: Paren
   );
 }
 
-/** Nome del campo indicato da una proprietà, se è un singolo riferimento (utile per log e messaggi). */
-export function fieldName(ref: string | undefined): string | undefined {
-  if (!ref) return undefined;
-  const single = SINGLE_FIELD.exec(ref);
-  if (single) return single[1];
-  return ref.includes('${') ? undefined : ref.trim();
-}
-
 /** Legge l'IdArea da una riga; null se il campo manca o è vuoto. */
 export function idOf(row: QueryRow, ref: string | undefined): string | null {
   // Stessa normalizzazione della memoria delle geometrie: " 1203" e "1203.0" diventano "1203",
@@ -87,25 +79,51 @@ export function escapeHtml(text: string): string {
 
 const numberFormat = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
 
+/**
+ * Testo che rappresenta un numero: cifre con eventuali punti e virgola, senza zeri iniziali.
+ * Gli zeri iniziali escludono i codici ("015146", "00123"), che vanno mostrati come sono.
+ */
+const NUMERIC_TEXT = /^-?(?:0|[1-9][\d.]*)(?:,\d+)?$|^-?(?:0|[1-9]\d*)\.\d+$/;
+
+/**
+ * Valore pronto da mostrare: numeri all'italiana con al massimo due decimali ("5.801.692", "12,35"),
+ * anche se arrivano come testo; valori assenti o non validi (NaN, Infinity) come testo vuoto.
+ */
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'number') return numberFormat.format(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? numberFormat.format(value) : '';
+  if (typeof value === 'string' && NUMERIC_TEXT.test(value.trim())) {
+    const n = toNumber(value);
+    if (Number.isFinite(n)) return numberFormat.format(n);
+  }
   return String(value);
 }
 
 /**
  * Popup Value: sostituisce `${F.CAMPO}` con i campi della riga e `${P.NOME}` con i parametri del Parent.
  * Il template viene dalla configurazione (fidato); i valori dai dati, quindi sono sempre escapati.
- * I segnaposto non riconosciuti restano come sono.
+ *
+ * - un campo o parametro che esiste ma è vuoto diventa testo vuoto;
+ * - un campo o parametro che NON esiste (es. un errore di battitura) resta scritto com'è, così
+ *   l'errore si vede nel popup invece di far sparire il valore in silenzio;
+ * - gli altri segnaposto (es. `${V.X}`, non gestiti) restano come sono.
  */
 export function renderTemplate(template: string, row: QueryRow, params: ParentParams = {}): string {
-  return template.replace(PLACEHOLDER, (_, kind: string, name: string) =>
-    escapeHtml(formatValue(kind === 'F' ? row[name] : params[name])),
-  );
+  return template.replace(PLACEHOLDER, (placeholder: string, kind: string, name: string) => {
+    const source = kind === 'F' ? row : params;
+    if (!Object.hasOwn(source, name)) return escapeHtml(placeholder);
+    return escapeHtml(formatValue(source[name]));
+  });
 }
 
-/** Numero → pixel, stringa → valore CSS così com'è. */
+/**
+ * Width/Height → valore CSS: un numero è in pixel, anche se scritto come testo ("400" → "400px",
+ * come può arrivare da una configurazione XML); gli altri testi passano così come sono ("50%", "300px").
+ */
 export function toCssSize(value: number | string | undefined, fallback: string): string {
-  if (value === undefined || value === null || value === '') return fallback;
-  return typeof value === 'number' ? `${value}px` : value;
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number') return Number.isFinite(value) ? `${value}px` : fallback;
+  const text = value.trim();
+  if (text === '') return fallback;
+  return /^\d+(?:\.\d+)?$/.test(text) ? `${text}px` : text;
 }
