@@ -530,6 +530,8 @@ cd backend && mvn test      # back-end (JUnit 5)
 | Componente | `sadas-map.component.browser.spec.ts`, `services/leaflet-fixes.browser.spec.ts` | `<sadas-map>` con un back-end finto (intercettore HTTP) e dati costruiti apposta: scala e legenda con righe duplicate, record senza area, PreQuery, errori di query e geometrie, parametri del Parent, Query vuota, clic veri sul canvas, selezione, Data Entry Flag, bolle, External point con coordinate uguali, popup protetti per l'HTML, cluster |
 | End-to-end | `e2e/*.e2e.ts` | La pagina di prova con il back-end simulato: i cinque scenari, mappa di base raggiungibile e no, clic e selezione, pannello dei livelli (metrica, Tutte/Nessuna, ricerca), cluster, filtro del Parent, errori simulati, livelli di dettaglio, scelta del back-end |
 
+Report dell'ultima esecuzione completa (esiti, durate, ambiente, difetto di Leaflet trovato): `docs/report-test-2026-11-17.pdf`.
+
 Note:
 - I test di componente ed end-to-end non usano internet: le tile di OpenStreetMap sono sostituite da tile vuote.
 - I test end-to-end avviano `ng serve` sulla porta 4300 (o riusano un server già avviato lì) e falliscono
