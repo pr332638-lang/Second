@@ -33,6 +33,7 @@ import {
   createOsmLayer,
   injectZoomLimits,
 } from './services/base-layer.factory';
+import './services/leaflet-fixes';
 import { createMarkerClusterGroup } from './services/leaflet-plugins';
 import { MAPS_PERFORMANCE } from './services/performance';
 import { MapsDataService, type AreaFeature, type GeometryScope } from './services/maps-data.service';

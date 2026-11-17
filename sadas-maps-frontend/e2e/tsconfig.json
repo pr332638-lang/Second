@@ -1,0 +1,9 @@
+/* Solo per il controllo dei tipi dei test end-to-end: Playwright li esegue con il suo compilatore. */
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["./**/*.ts", "../playwright.config.ts"]
+}

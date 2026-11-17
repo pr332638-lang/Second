@@ -21,6 +21,7 @@ angular.json, package.json, tsconfig*.json   Progetto Angular 22 (dipendenze, st
 src/main.ts, src/index.html         Avvio dell'applicazione
 src/app/app.ts, app.config.ts       Avvio del prototipo (pagina di prova + intercettori)
 src/styles.scss                     Stili globali del prototipo
+playwright.config.ts, e2e/          Test end-to-end della pagina di prova (Playwright): vedi *Test*
 src/app/demo/                       SOLO PROTOTIPO, da togliere all'integrazione
 ├── demo-page.component.*          Pagina di prova: scenario, filtro Parent simulato, clic, registro richieste
 ├── demo-scenarios.ts              Configurazioni pronte (al posto del Manager)
@@ -34,12 +35,14 @@ src/app/demo/                       SOLO PROTOTIPO, da togliere all'integrazione
 src/app/maps/
 ├── maps.models.ts                 Configurazione, metriche, risposte API, parametri di clic
 ├── sadas-map.component.ts/.html/.scss   Componente principale
+├── sadas-map.component.browser.spec.ts  Test del componente in un browser vero (Vitest, modalità browser)
 ├── legend/map-legend.component.ts Legenda a barra da Min/Max Value e Min/Max Color
 ├── services/
 │   ├── maps-data.service.ts       Query e geometrie (con cache per livello di dettaglio)
 │   ├── base-layer.factory.ts      Mappa di base OpenStreetMap: URL e zoom del server
 │   ├── leaflet-global.ts          Leaflet come oggetto globale L, prima dei plugin
 │   ├── leaflet-plugins.ts         markercluster (nel bundle principale) e creazione dei cluster
+│   ├── leaflet-fixes.ts           Correzioni a difetti di Leaflet 1.9.4 (con leaflet-fixes.browser.spec.ts)
 │   └── performance.ts             Soglie di prestazioni (MAPS_PERFORMANCE), tarate per computer lenti
 └── utils/
     ├── scale.ts                   Interpolazione colore, opacità, raggio
@@ -62,7 +65,7 @@ Requisiti: Node.js 20.19+ / 22.12+ / 24+.
 2. Avviare il back-end: `cd backend && mvn spring-boot:run` (Java 21, porta 8080).
 3. Avviare il front-end con `npm start` (cioè `ng serve`, con `proxy.conf.json` già indicato in `angular.json`)
    e aprire http://localhost:4200.
-4. Test: `npm test -- --watch=false` (Vitest). Compilazione di produzione: `npm run build`.
+4. Test: vedi *Test* (`npm test`, `npm run test:browser`, `npm run e2e`). Compilazione di produzione: `npm run build`.
 
 Senza Java si può usare il back-end simulato nel browser: http://localhost:4200/?backend=simulato.
 La pagina di prova dice quale back-end è in uso e ha un collegamento per passare all'altro.
@@ -511,10 +514,31 @@ Senza accesso a Maven Central da questo ambiente, il progetto **non è stato com
 ## Test
 
 ```bash
-ng test                  # front-end (Vitest)
-cd backend && mvn test   # back-end (JUnit 5)
+npm test -- --watch=false   # funzioni pure e dati simulati (Vitest, in Node con jsdom: veloce)
+npm run test:browser        # componente <sadas-map> e correzioni a Leaflet (Vitest in Chromium)
+npm run e2e                 # pagina di prova completa (Playwright, Chromium)
+npm run e2e:all             # come sopra, anche in Firefox e WebKit
+cd backend && mvn test      # back-end (JUnit 5)
 ```
 
-Front-end: le utilità di `utils/` e i dati simulati sono funzioni pure, coperte dai file `.spec.ts`.
+**Prima volta:** `test:browser` ed `e2e` usano Chromium di Playwright. Se non è già installato:
+`npx playwright install chromium` (per `e2e:all` anche `firefox webkit`).
+
+| Livello | File | Cosa prova |
+| --- | --- | --- |
+| Unità | `utils/*.spec.ts`, `mock-data/mock-data.spec.ts` | Funzioni pure: scala, colori, numeri, template, zoom, memoria delle geometrie, deduplicazione; dati simulati |
+| Componente | `sadas-map.component.browser.spec.ts`, `services/leaflet-fixes.browser.spec.ts` | `<sadas-map>` con un back-end finto (intercettore HTTP) e dati costruiti apposta: scala e legenda con righe duplicate, record senza area, PreQuery, errori di query e geometrie, parametri del Parent, Query vuota, clic veri sul canvas, selezione, Data Entry Flag, bolle, External point con coordinate uguali, popup protetti per l'HTML, cluster |
+| End-to-end | `e2e/*.e2e.ts` | La pagina di prova con il back-end simulato: i cinque scenari, mappa di base raggiungibile e no, clic e selezione, pannello dei livelli (metrica, Tutte/Nessuna, ricerca), cluster, filtro del Parent, errori simulati, livelli di dettaglio, scelta del back-end |
+
+Note:
+- I test di componente ed end-to-end non usano internet: le tile di OpenStreetMap sono sostituite da tile vuote.
+- I test end-to-end avviano `ng serve` sulla porta 4300 (o riusano un server già avviato lì) e falliscono
+  se in console compaiono errori o eccezioni non gestite.
+- Per leggere ciò che Leaflet disegna su canvas (poligoni e bolle), i test accedono alla mappa Leaflet:
+  nei test del componente al suo campo privato `map`, negli end-to-end tramite `window.__map`, esposto
+  solo dai test (`e2e/demo-page.ts`).
+- Non coperti: il back-end Java (gli end-to-end usano quello simulato), le tile vere di OpenStreetMap,
+  le prestazioni su computer lenti (vedi *Computer lenti*).
+
 Back-end: dati simulati (con i valori di controllo calcolati dal generatore del front-end), PreQuery,
 assemblaggio degli anelli, `GeometryService` con un motore finto, scrittura del GeoJSON.
