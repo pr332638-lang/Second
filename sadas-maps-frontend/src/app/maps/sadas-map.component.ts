@@ -261,9 +261,15 @@ export class SadasMapComponent {
   private dataLayer?: L.Layer;
   private resizeObserver?: ResizeObserver;
 
-  /** Area selezionata: la chiave sopravvive ai ridisegni, il layer no. */
+  /** Area selezionata: la chiave sopravvive ai ridisegni, i layer no. */
   private selectedKey: string | null = null;
-  private selectedLayer: L.Path | null = null;
+  /**
+   * Layer evidenziati come selezionati. Di solito uno, ma più record possono avere la stessa chiave
+   * (es. due negozi senza IdArea con le stesse coordinate): si evidenziano e si ripristinano tutti insieme.
+   */
+  private selectedPaths: L.Path[] = [];
+  /** Layer del disegno corrente per chiave, per selezionare tutti quelli di una chiave. */
+  private readonly pathsByKey = new Map<string, L.Path[]>();
   private readonly baseStyles = new WeakMap<L.Path, L.PathOptions>();
 
   /** null = annulla la query in corso (es. passaggio al risultato del Parent). */
@@ -498,7 +504,9 @@ export class SadasMapComponent {
 
     this.dataLayer?.remove();
     this.dataLayer = undefined;
-    this.selectedLayer = null; // la chiave resta: il nuovo layer verrà riselezionato
+    // La chiave resta: i nuovi layer con quella chiave verranno riselezionati in registerPath.
+    this.selectedPaths = [];
+    this.pathsByKey.clear();
 
     if (!metric || uniqueRows.length === 0) {
       this.unmatched.set(0);
@@ -572,7 +580,7 @@ export class SadasMapComponent {
         this.registerPath(path, id, baseStyle(id), true);
         // Testo costruito solo all'apertura: con migliaia di aree si risparmia lavoro al disegno.
         path.bindTooltip(() => tooltipHtml(label, metric, row), { sticky: true });
-        path.on('click', (e) => this.onAreaClick(e as L.LeafletMouseEvent, metric, row, id, label, path, id));
+        path.on('click', (e) => this.onAreaClick(e as L.LeafletMouseEvent, metric, row, id, label, id));
       },
     });
     return { layer, unmatched };
@@ -599,7 +607,7 @@ export class SadasMapComponent {
       const marker = L.circleMarker(pos.latlng, base);
       // Le bolle non vengono portate in primo piano: coprirebbero quelle più piccole.
       this.registerPath(marker, key, base, false);
-      this.decoratePoint(marker, metric, row, pos.idArea, label, marker, key);
+      this.decoratePoint(marker, metric, row, pos.idArea, label, key);
       items.push({ marker, radius: s.radius });
     }
 
@@ -624,7 +632,7 @@ export class SadasMapComponent {
 
       const label = this.labelFor(row, config, pos.feature, pos.idArea);
       const marker = L.marker(pos.latlng, { icon, keyboard: false, title: label });
-      this.decoratePoint(marker, metric, row, pos.idArea, label, null, pointKey(pos));
+      this.decoratePoint(marker, metric, row, pos.idArea, label, pointKey(pos));
       markers.push(marker);
     }
 
@@ -645,13 +653,12 @@ export class SadasMapComponent {
     row: QueryRow,
     idArea: string | null,
     label: string,
-    path: L.Path | null,
     key: string,
   ): void {
     // Testi costruiti solo all'apertura (e con i parametri del Parent di quel momento).
     layer.bindTooltip(() => escapeHtml(label));
     layer.bindPopup(() => popupHtml(metric, row, label, this.parentParams()));
-    layer.on('click', (e) => this.onAreaClick(e as L.LeafletMouseEvent, metric, row, idArea, label, path, key));
+    layer.on('click', (e) => this.onAreaClick(e as L.LeafletMouseEvent, metric, row, idArea, label, key));
   }
 
   /** Posizione di un punto: dalla query (External point) o dal punto centrale dell'area. */
@@ -686,28 +693,34 @@ export class SadasMapComponent {
   /** Stile di base, hover e riselezione dopo un ridisegno. */
   private registerPath(path: L.Path, key: string, base: L.PathOptions, bringToFrontOnHover: boolean): void {
     this.baseStyles.set(path, base);
+    const sameKey = this.pathsByKey.get(key);
+    if (sameKey) sameKey.push(path);
+    else this.pathsByKey.set(key, [path]);
     if (key === this.selectedKey) {
-      this.selectedLayer = path;
+      this.selectedPaths.push(path);
       path.setStyle(selectedStyle(base));
     }
     path.on('mouseover', () => {
-      if (path === this.selectedLayer) return;
+      if (this.selectedPaths.includes(path)) return;
       path.setStyle(hoverStyle(base));
       if (bringToFrontOnHover) path.bringToFront();
     });
     path.on('mouseout', () => {
-      if (path === this.selectedLayer) return;
+      if (this.selectedPaths.includes(path)) return;
       path.setStyle(base);
     });
   }
 
-  /** Seleziona un'area (path null = marcatore o nessuna selezione) e ripristina la precedente. */
-  private select(path: L.Path | null, key: string | null): void {
-    const previous = this.selectedLayer;
-    if (previous && previous !== path) previous.setStyle(this.baseStyles.get(previous) ?? {});
-    this.selectedLayer = path;
+  /**
+   * Seleziona l'area con questa chiave (null = nessuna selezione): ripristina tutti i layer selezionati
+   * prima ed evidenzia tutti quelli della chiave. I marcatori non hanno layer da evidenziare,
+   * ma la chiave si ricorda lo stesso.
+   */
+  private select(key: string | null): void {
+    for (const previous of this.selectedPaths) previous.setStyle(this.baseStyles.get(previous) ?? {});
     this.selectedKey = key;
-    if (path) {
+    this.selectedPaths = key === null ? [] : [...(this.pathsByKey.get(key) ?? [])];
+    for (const path of this.selectedPaths) {
       path.setStyle(selectedStyle(this.baseStyles.get(path) ?? {}));
       if (path instanceof L.Polygon) path.bringToFront();
     }
@@ -723,12 +736,11 @@ export class SadasMapComponent {
     row: QueryRow,
     idArea: string | null,
     label: string,
-    path: L.Path | null,
     key: string,
   ): void {
     // Impedisce che lo stesso clic arrivi anche alla mappa (Data Entry Flag).
     L.DomEvent.stopPropagation(e);
-    this.select(path, key);
+    this.select(key);
     this.areaClick.emit({
       IDAREAMAP: idArea,
       IDMETRIC: metric.idMetric,
@@ -742,7 +754,7 @@ export class SadasMapComponent {
   }
 
   private onMapClick(e: L.LeafletMouseEvent): void {
-    this.select(null, null); // clic fuori dalle aree: nessuna area selezionata
+    this.select(null); // clic fuori dalle aree: nessuna area selezionata
     if (!this.config().dataEntryFlag) return;
     const metric = this.metric();
     this.areaClick.emit({

@@ -202,7 +202,8 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
     description:
       '2.500 negozi con coordinate dalla query, scritte come testo con la virgola (External point = Sì). ' +
       'Oltre 200 marcatori compaiono i cluster. Data Entry Flag è attivo: anche un clic fuori dai punti ' +
-      'invia LAT e LNG. Sei righe hanno coordinate non valide.',
+      'invia LAT e LNG. Sei righe hanno coordinate non valide. Due negozi diversi stanno allo stesso ' +
+      'indirizzo (vicino a Milano, macroarea Nord): compaiono entrambi e, a bolle, si selezionano insieme.',
     filter: 'macroarea',
     config: {
       id: DEMO_IDS.negozi,

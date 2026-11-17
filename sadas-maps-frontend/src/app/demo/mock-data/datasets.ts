@@ -162,6 +162,17 @@ const CATEGORIES = ['Alimentari', 'Abbigliamento', 'Elettronica', 'Casa', 'Farma
 export const NEGOZI_COUNT = 2_500;
 /** Righe con coordinate non valide (vuote, testo, fuori intervallo): devono finire tra i "record senza area". */
 export const NEGOZI_INVALID_COUNT = 6;
+/**
+ * Due negozi allo stesso indirizzo, senza IdArea: devono comparire entrambi e, a bolle,
+ * essere selezionati insieme (stessa chiave "lat,lng"). Fatturati diversi, così le due bolle si distinguono.
+ */
+export const NEGOZI_SAME_ADDRESS = [
+  { INSEGNA: 'Negozio stesso indirizzo A', CATEGORIA: 'Alimentari', FATTURATO: 1_800_000 },
+  { INSEGNA: 'Negozio stesso indirizzo B', CATEGORIA: 'Farmacia', FATTURATO: 300_000 },
+] as const;
+/** Indirizzo comune ai due negozi (nella regione P, macroarea Nord). */
+export const SAME_ADDRESS_LAT = '45,46430';
+export const SAME_ADDRESS_LNG = '9,18950';
 
 let negoziCache: QueryRow[] | null = null;
 
@@ -194,6 +205,9 @@ function negoziRows(params: Readonly<Record<string, unknown>>): QueryRow[] {
         LNG: jLng.toFixed(5).replace('.', ','),
         FATTURATO: Math.round(50_000 + hash01(29, k) * 1_950_000),
       });
+    }
+    for (const shop of NEGOZI_SAME_ADDRESS) {
+      rows.push({ ...shop, MACROAREA: 'Nord', LAT: SAME_ADDRESS_LAT, LNG: SAME_ADDRESS_LNG });
     }
     const invalid: Array<[unknown, unknown]> = [
       ['', ''],

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { AreaFeature } from '../../maps/utils/geometry-cache';
-import { DEMO_IDS, MISSING_POLYGON_ID, NEGOZI_COUNT, NEGOZI_INVALID_COUNT, runMockGeometries, runMockQuery } from './datasets';
+import {
+  DEMO_IDS,
+  MISSING_POLYGON_ID,
+  NEGOZI_COUNT,
+  NEGOZI_INVALID_COUNT,
+  NEGOZI_SAME_ADDRESS,
+  SAME_ADDRESS_LAT,
+  SAME_ADDRESS_LNG,
+  runMockGeometries,
+  runMockQuery,
+} from './datasets';
 import {
   ENCLAVE_POLYGON_ID,
   PROVINCE_COUNT,
@@ -139,7 +149,13 @@ describe('back-end simulato', () => {
   });
   it('i negozi hanno coordinate come testo con la virgola, più alcune non valide', () => {
     const rows = runMockQuery(DEMO_IDS.negozi, {}).rows;
-    expect(rows.length).toBe(NEGOZI_COUNT + NEGOZI_INVALID_COUNT);
+    expect(rows.length).toBe(NEGOZI_COUNT + NEGOZI_SAME_ADDRESS.length + NEGOZI_INVALID_COUNT);
     expect(String(rows[0]!['LAT']).includes(',')).toBe(true);
+  });
+  it('due negozi diversi allo stesso indirizzo, nella macroarea Nord', () => {
+    const sameAddress = runMockQuery(DEMO_IDS.negozi, { MACROAREA: 'Nord' }).rows.filter(
+      (r) => r['LAT'] === SAME_ADDRESS_LAT && r['LNG'] === SAME_ADDRESS_LNG,
+    );
+    expect(sameAddress.map((r) => r['INSEGNA'])).toEqual(NEGOZI_SAME_ADDRESS.map((s) => s.INSEGNA));
   });
 });
