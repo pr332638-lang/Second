@@ -122,7 +122,7 @@ del package `simulation` (vedi *Back-end Java 21*).
 ## Dipendenze
 
 ```bash
-npm install leaflet@^1.9.4 leaflet.markercluster
+npm install --save-exact leaflet@1.9.4 leaflet.markercluster@1.5.3
 npm install -D @types/leaflet @types/leaflet.markercluster @types/geojson
 ```
 
@@ -130,6 +130,11 @@ Si usa **Leaflet puro**, senza wrapper Angular: la mappa si crea nel codice del 
 L'unico plugin è Leaflet.markercluster (uso confermato dai tutor), per raggruppare i marcatori quando sono molti.
 Usa l'oggetto globale `L` appena viene caricato: `leaflet-global.ts` lo espone e va importato prima del plugin
 (lo fa `leaflet-plugins.ts`).
+
+Le versioni di Leaflet (1.9.4) e di markercluster (1.5.3) sono **fissate** in `package.json`, senza `^`:
+`leaflet-fixes.ts` corregge un difetto del renderer canvas modificando un metodo privato di Leaflet.
+Aggiornarle è una scelta esplicita, da fare dopo aver rilanciato `npm run test:browser`. Se il metodo
+corretto non esistesse più, la correzione non si applica e compare un avviso in console, invece di rompere la mappa.
 
 Si usa Leaflet 1.9 perché markercluster è pensato per la 1.x.
 Leaflet 2.0 cambia l'API (niente `L` globale, costruttori al posto dei metodi factory) e all'ultima

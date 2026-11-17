@@ -21,9 +21,17 @@ interface CanvasInternals {
   _redraw(): void;
 }
 
-const canvasProto = L.Canvas.prototype as unknown as CanvasInternals;
+const canvasProto = L.Canvas.prototype as unknown as Partial<CanvasInternals>;
 const redraw = canvasProto._redraw;
-canvasProto._redraw = function (this: CanvasInternals): void {
-  if (!this._ctx) return;
-  redraw.call(this);
-};
+// _redraw è un metodo privato: se una versione futura di Leaflet lo togliesse o lo rinominasse,
+// la correzione non si applica (con un avviso), invece di rompere ogni disegno della mappa.
+// Per questo la versione di Leaflet è fissata in package.json: aggiornarla è una scelta esplicita,
+// da fare dopo aver rilanciato leaflet-fixes.browser.spec.ts.
+if (typeof redraw === 'function') {
+  canvasProto._redraw = function (this: CanvasInternals): void {
+    if (!this._ctx) return;
+    redraw.call(this);
+  };
+} else {
+  console.warn('[sadas-map] Leaflet è cambiato: la correzione del renderer canvas non è applicata');
+}
