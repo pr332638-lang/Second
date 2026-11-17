@@ -250,6 +250,43 @@ describe('SadasMapComponent (browser)', () => {
       expect(r.el.querySelector('sadas-map-legend')).toBeNull();
     });
 
+    it('senza righe mostra un avviso, che sparisce quando arrivano dati', async () => {
+      backend.query = ok([]);
+      const r = await render(BASE, { parentParams: { REGIONE: 1 } });
+      await until(r, () => text(r, '.sadas-map__notice')?.includes('Nessun dato da mostrare'));
+
+      backend.query = ok([{ ID: 1, NOME: 'Area 1', V: 10 }]);
+      r.fixture.componentRef.setInput('parentParams', { REGIONE: 2 });
+      await until(r, () => polygons(r).length === 1);
+      await until(r, () => !text(r, '.sadas-map__notice')?.includes('Nessun dato'));
+    });
+
+    it('il pannello usa i parametri del Parent nelle etichette, come i tooltip', async () => {
+      backend.query = ok([{ ID: 1, NOME: 'Area 1', V: 10 }]);
+      const r = await render({ ...BASE, fieldLabel: '${F.NOME} (${P.ANNO})' }, { parentParams: { ANNO: 2024 } });
+      await until(r, () => polygons(r).length === 1);
+      await until(r, () => text(r, '.sadas-map__area-list label')?.includes('Area 1 (2024)'));
+    });
+
+    it('due metriche con lo stesso ID Metric: menu funzionante e avviso in console', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        backend.query = ok([
+          { ID: 1, NOME: 'Area 1', V: 10, D: 1 },
+          { ID: 2, NOME: 'Area 2', V: 30, D: 3 },
+        ]);
+        const r = await render({ ...BASE, metrics: [POPOLAZIONE, { ...DENSITA, idMetric: POPOLAZIONE.idMetric }] });
+        await until(r, () => polygons(r).length === 2);
+        const select = r.el.querySelector<HTMLSelectElement>('.sadas-map__panel select')!;
+        expect(select.options).toHaveLength(2);
+        await userEvent.selectOptions(select, 'Densità');
+        await until(r, () => text(r, '.legend__title') === 'Densità');
+        expect(warn.mock.calls.some(([m]) => String(m).includes('ID Metric ripetuti (POP)'))).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it('cambiando metrica dal pannello dei livelli cambia la legenda', async () => {
       backend.query = ok([
         { ID: 1, NOME: 'Area 1', V: 10, D: 1 },
@@ -387,6 +424,24 @@ describe('SadasMapComponent (browser)', () => {
       fireClick(r.map(), [40, 5]);
       await until(r, () => !isSelected(area1()));
       expect(r.clicks).toHaveLength(1); // senza Data Entry Flag il clic fuori non emette nulla
+    });
+
+    it('passando sopra un’area vicina, quella selezionata resta in primo piano', async () => {
+      backend.query = ok([
+        { ID: 1, NOME: 'Area 1', V: 10 },
+        { ID: 2, NOME: 'Area 2', V: 30 },
+      ]);
+      const r = await render(BASE);
+      await until(r, () => polygons(r).length === 2);
+      const area = (id: string) => polygons(r).find((p) => String(p.feature?.id) === id)!;
+      fireClick(area('1'), [44.5, 10.5]);
+      await until(r, () => isSelected(area('1')));
+
+      area('2').fire('mouseover');
+      // Ordine di disegno del canvas (interno a Leaflet): l'ultimo disegnato sta sopra.
+      const renderer = (area('1') as unknown as { _renderer: { _drawLast?: { layer: L.Path } } })._renderer;
+      expect(renderer._drawLast?.layer).toBe(area('1'));
+      expect(isSelected(area('1'))).toBe(true);
     });
 
     it('con Data Entry Flag un clic fuori dalle aree emette solo LAT e LNG', async () => {

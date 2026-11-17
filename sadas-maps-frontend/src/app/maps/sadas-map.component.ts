@@ -90,6 +90,7 @@ const DEFAULT_ZOOM = 6;
 const AREA_FILTER_THRESHOLD = 15;
 const PREQUERY_DEFAULT_MESSAGE = 'Nessun dato da visualizzare: la condizione di pre-query non è soddisfatta.';
 const BASE_MAP_UNAVAILABLE = 'Mappa di base non raggiungibile: controllare la connessione o il server delle mappe.';
+const NO_DATA = 'Nessun dato da mostrare con i filtri attuali.';
 const GEOMETRIES_UNAVAILABLE = 'Confini o punti delle aree non caricati: nuovo tentativo al prossimo spostamento della mappa.';
 /**
  * Scala usata quando non ce n'è una (nessun valore numerico e Min/Max non impostati):
@@ -164,6 +165,13 @@ export class SadasMapComponent {
   protected readonly notice = signal<string | null>(null);
   /** Avviso non bloccante: l'ultima richiesta di geometrie è fallita. Sparisce alla prima riuscita. */
   protected readonly geometryNotice = signal<string | null>(null);
+  /**
+   * Avviso non bloccante: la query (o il risultato del Parent) non ha righe. Senza, la mappa resterebbe
+   * vuota senza spiegazioni. Non compare con la PreQuery fallita, che ha già il suo messaggio.
+   */
+  protected readonly noDataNotice = computed(() =>
+    this.status() === 'ready' && this.rows().length === 0 ? NO_DATA : null,
+  );
   protected readonly rows = signal<readonly QueryRow[]>([]);
   protected readonly unmatched = signal(0);
 
@@ -211,11 +219,13 @@ export class SadasMapComponent {
     const metric = this.metric();
     const config = this.config();
     if (!metric) return [];
+    // Stessi parametri del Parent dei tooltip (labelFor): un `${P.…}` in Field Label vale anche qui.
+    const params = this.parentParams();
     const byKey = new Map<string, string>();
     for (const row of this.uniqueRows()) {
       const key = areaKeyOf(row, metric, config);
       if (key === null) continue;
-      const label = fieldValue(row, config.fieldLabel);
+      const label = fieldValue(row, config.fieldLabel, params);
       byKey.set(key, label === undefined || label === null || label === '' ? key : String(label));
     }
     return [...byKey].map(([key, label]) => ({ key, label })).sort((a, b) => areaCollator.compare(a.label, b.label));
@@ -345,6 +355,18 @@ export class SadasMapComponent {
       this.rows();
       this.metric();
       if (this.mapReady()) untracked(() => this.geometryNeeded$.next());
+    });
+
+    // Configurazione: ID Metric ripetuti rendono ambiguo il parametro IDMETRIC del clic.
+    effect(() => {
+      const ids = this.metrics().map((m) => m.idMetric);
+      const repeated = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+      if (repeated.length > 0) {
+        console.warn(
+          `[sadas-map] ${untracked(this.config).id}: ID Metric ripetuti (${repeated.join(', ')}): ` +
+            'il parametro IDMETRIC del clic è ambiguo',
+        );
+      }
     });
 
     // Disegno: ogni volta che cambiano dati, metrica, scala, aree visibili o geometrie disponibili.
@@ -704,7 +726,11 @@ export class SadasMapComponent {
     path.on('mouseover', () => {
       if (this.selectedPaths.includes(path)) return;
       path.setStyle(hoverStyle(base));
-      if (bringToFrontOnHover) path.bringToFront();
+      if (bringToFrontOnHover) {
+        path.bringToFront();
+        // L'area selezionata torna sopra: il suo bordo spesso non deve essere coperto dalla vicina.
+        for (const selected of this.selectedPaths) selected.bringToFront();
+      }
     });
     path.on('mouseout', () => {
       if (this.selectedPaths.includes(path)) return;

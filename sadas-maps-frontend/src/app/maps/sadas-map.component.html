@@ -32,7 +32,8 @@
               <label class="sadas-map__field">
                 <span>Metrica</span>
                 <select #metricSelect (change)="selectMetric(+metricSelect.value)">
-                  @for (m of metrics(); track m.idMetric; let i = $index) {
+                  <!-- track sull'indice: due metriche con lo stesso ID Metric non devono rompere il menu -->
+                  @for (m of metrics(); track $index; let i = $index) {
                     <option [value]="i" [selected]="i === metricIndex()">{{ m.name }}</option>
                   }
                 </select>
@@ -102,8 +103,11 @@
       }
     }
 
-    @if (unmatched() > 0 || notice() || geometryNotice()) {
+    @if (unmatched() > 0 || notice() || geometryNotice() || noDataNotice()) {
       <div class="sadas-map__notice" role="status">
+        @if (noDataNotice(); as d) {
+          <span>{{ d }}</span>
+        }
         @if (unmatched() > 0) {
           <span>{{ unmatched() }} record senza area corrispondente</span>
         }
