@@ -110,7 +110,10 @@ compresso) e numero di righe o aree. Le richieste fallite mostrano lo stato HTTP
 ### All'integrazione
 
 Nel front-end si eliminano la cartella `demo/`, `app.ts` e `app.config.ts` del prototipo ed eventualmente
-si imposta `MAPS_API_BASE_URL`: il componente in `maps/` non cambia. Nel back-end si sostituiscono le classi
+si imposta `MAPS_API_BASE_URL`: il componente in `maps/` non cambia.
+Il componente è scritto e verificato con `"strict": true` (TypeScript) e `"strictTemplates": true` (Angular),
+dichiarati in `tsconfig.json` anche se nelle versioni attuali sono già il default: nel progetto che lo ospita
+vanno mantenuti attivi, altrimenti si perdono i controlli sui tipi su cui il codice fa affidamento. Nel back-end si sostituiscono le classi
 del package `simulation` (vedi *Back-end Java 21*).
 
 ## Dipendenze
