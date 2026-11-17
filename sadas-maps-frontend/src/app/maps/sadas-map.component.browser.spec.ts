@@ -317,6 +317,55 @@ describe('SadasMapComponent (browser)', () => {
     });
   });
 
+  describe('configurazione', () => {
+    it('una configurazione nuova ma uguale non rilancia la query; una diversa sì', async () => {
+      backend.query = ok([{ ID: 1, NOME: 'Area 1', V: 10 }]);
+      const r = await render(BASE);
+      await until(r, () => polygons(r).length === 1);
+      expect(backend.queries).toHaveLength(1);
+
+      r.fixture.componentRef.setInput('config', structuredClone(BASE)); // stesso contenuto, oggetto nuovo
+      r.fixture.componentRef.setInput('parentParams', {}); // anche i parametri: oggetto nuovo, stesso contenuto
+      await r.fixture.whenStable();
+      expect(backend.queries).toHaveLength(1);
+
+      r.fixture.componentRef.setInput('config', { ...BASE, title: 'Titolo nuovo' }); // non tocca la query
+      await until(r, () => text(r, '.sadas-map__title') === 'Titolo nuovo');
+      expect(backend.queries).toHaveLength(1);
+
+      r.fixture.componentRef.setInput('config', { ...BASE, id: 'altra-mappa' });
+      await until(r, () => backend.queries.length === 2);
+    });
+
+    it('se centro e zoom della configurazione cambiano, la mappa si sposta', async () => {
+      backend.query = ok([{ ID: 1, NOME: 'Area 1', V: 10 }]);
+      const r = await render(BASE);
+      await until(r, () => polygons(r).length === 1);
+      r.map().setView([40, 9], 5, { animate: false }); // spostamento dell'utente
+
+      r.fixture.componentRef.setInput('config', { ...BASE, title: 'Altro titolo' });
+      await r.fixture.whenStable();
+      expect(r.map().getZoom()).toBe(5); // la vista dell'utente resta
+
+      r.fixture.componentRef.setInput('config', { ...BASE, mapCenterLat: 45, mapCenterLng: 9, mapCenterZoom: 8 });
+      await until(r, () => r.map().getZoom() === 8);
+      expect(r.map().getCenter().lat).toBeCloseTo(45, 2);
+      expect(backend.queries).toHaveLength(1);
+    });
+
+    it('le righe ripetute per la stessa area sono segnalate', async () => {
+      backend.query = ok([
+        { ID: 1, NOME: 'Area 1', V: 100 },
+        { ID: 2, NOME: 'Area 2', V: 10 },
+        { ID: 1, NOME: 'Area 1', V: 5 },
+        { ID: 1, NOME: 'Area 1', V: 7 },
+      ]);
+      const r = await render(BASE);
+      await until(r, () => polygons(r).length === 2);
+      await until(r, () => text(r, '.sadas-map__notice')?.includes('Righe ripetute per la stessa area: 2'));
+    });
+  });
+
   describe('PreQuery, errori e risultato del Parent', () => {
     it('con PreQuery fallita mostra il messaggio e non chiede geometrie', async () => {
       backend.query = { preQueryOk: false, message: 'Selezionare una regione', rows: [] };

@@ -37,6 +37,7 @@ import './services/leaflet-fixes';
 import { createMarkerClusterGroup } from './services/leaflet-plugins';
 import { MAPS_PERFORMANCE } from './services/performance';
 import { MapsDataService, type AreaFeature, type GeometryScope } from './services/maps-data.service';
+import { sameValue } from './utils/equal';
 import { boundsToBbox, detailLevelForZoom, isValidLatLng } from './utils/geo';
 import {
   STYLE_DEFAULTS,
@@ -74,8 +75,14 @@ interface BuiltLayer {
 }
 
 interface QueryRequest {
-  config: MapsConfig;
+  componentId: string;
   params: Readonly<Record<string, unknown>>;
+}
+
+/** Vista iniziale della mappa: centro e zoom dalla configurazione (MapCenterLat/Long/Zoom). */
+interface MapView {
+  center: L.LatLngTuple;
+  zoom: number;
 }
 
 /** Voce del pannello dei livelli: un'area che l'utente può mostrare o nascondere. */
@@ -150,6 +157,35 @@ export class SadasMapComponent {
   /** Clic su un'area, o sulla mappa con Data Entry Flag attivo. L'host apre Page o HyperLink. */
   readonly areaClick = output<MapClickParams>();
 
+  /**
+   * La configurazione confrontata per CONTENUTO: se la pagina ospite passa un oggetto nuovo uguale
+   * al precedente, non riparte niente (né query né disegno). Tutto il componente legge questa, non `config`.
+   */
+  protected readonly settings = computed(() => this.config(), { equal: sameValue });
+  /** I parametri del Parent, anch'essi confrontati per contenuto. */
+  private readonly params = computed(() => this.parentParams(), { equal: sameValue });
+  /** Ciò da cui dipende la query: cambiare titolo, metriche o centro non deve rilanciarla. */
+  private readonly querySource = computed(
+    () => {
+      const config = this.settings();
+      return { componentId: config.id, hasQuery: config.hasQuery !== false };
+    },
+    { equal: sameValue },
+  );
+  /** Centro e zoom chiesti dalla configurazione. Se cambiano dopo la creazione, la mappa si sposta. */
+  private readonly configuredView = computed<MapView>(
+    () => {
+      const config = this.settings();
+      const hasCenter = Number.isFinite(config.mapCenterLat) && Number.isFinite(config.mapCenterLng);
+      return {
+        center: hasCenter ? [config.mapCenterLat!, config.mapCenterLng!] : DEFAULT_CENTER,
+        // MapCenterZoom assente, non numerico o NaN → DEFAULT_ZOOM; fuori intervallo → limitato.
+        zoom: clampZoom(config.mapCenterZoom, this.zoomLimits.maxZoom, DEFAULT_ZOOM),
+      };
+    },
+    { equal: sameValue },
+  );
+
   private readonly mapHost = viewChild.required<ElementRef<HTMLElement>>('mapHost');
   private readonly data = inject(MapsDataService);
   /** Soglie tarate per computer lenti (services/performance.ts). */
@@ -191,7 +227,7 @@ export class SadasMapComponent {
    */
   private readonly detailLevel = signal<GeometryLevel>(detailLevelForZoom(DEFAULT_ZOOM));
 
-  protected readonly metrics = computed(() => this.config().metrics ?? []);
+  protected readonly metrics = computed(() => this.settings().metrics ?? []);
   protected readonly metricIndex = computed(() =>
     Math.min(this.selectedMetric(), Math.max(0, this.metrics().length - 1)),
   );
@@ -202,25 +238,30 @@ export class SadasMapComponent {
    */
   private readonly uniqueRows = computed<readonly QueryRow[]>(() => {
     const m = this.metric();
-    return m ? uniqueRowsPerArea(this.rows(), m, this.config()) : this.rows();
+    return m ? uniqueRowsPerArea(this.rows(), m, this.settings()) : this.rows();
   });
+  /**
+   * Righe scartate perché ripetono un'area già presente (vale l'ultima). Si mostrano in un avviso:
+   * quale riga vince dipende dall'ordine delle righe, che solo la query può garantire (ORDER BY).
+   */
+  protected readonly repeatedRows = computed(() => this.rows().length - this.uniqueRows().length);
   private readonly range = computed<ValueRange | null>(() => {
     const m = this.metric();
     return m ? resolveRange(m, this.uniqueRows()) : null;
   });
 
   private readonly scope = computed<GeometryScope>(() => ({
-    componentId: this.config().id,
-    connection: this.config().connection,
+    componentId: this.settings().id,
+    connection: this.settings().connection,
   }));
 
   /** Aree della metrica corrente, in ordine alfabetico, per il pannello dei livelli. */
   protected readonly areaItems = computed<AreaItem[]>(() => {
     const metric = this.metric();
-    const config = this.config();
+    const config = this.settings();
     if (!metric) return [];
     // Stessi parametri del Parent dei tooltip (labelFor): un `${P.…}` in Field Label vale anche qui.
-    const params = this.parentParams();
+    const params = this.params();
     const byKey = new Map<string, string>();
     for (const row of this.uniqueRows()) {
       const key = areaKeyOf(row, metric, config);
@@ -265,10 +306,12 @@ export class SadasMapComponent {
     };
   });
 
-  protected readonly cssWidth = computed(() => toCssSize(this.config().width, '100%'));
-  protected readonly cssHeight = computed(() => toCssSize(this.config().height, '100%'));
+  protected readonly cssWidth = computed(() => toCssSize(this.settings().width, '100%'));
+  protected readonly cssHeight = computed(() => toCssSize(this.settings().height, '100%'));
 
   private map?: L.Map;
+  /** Ultima vista della configurazione applicata alla mappa. */
+  private appliedView?: MapView;
   private dataLayer?: L.Layer;
   private resizeObserver?: ResizeObserver;
 
@@ -297,7 +340,7 @@ export class SadasMapComponent {
           if (!request) return EMPTY;
           this.status.set('loading');
           this.message.set(null);
-          return this.data.runQuery(request.config.id, request.params).pipe(
+          return this.data.runQuery(request.componentId, request.params).pipe(
             catchError((err: unknown) => {
               console.error('[sadas-map] errore query', err);
               return of(null);
@@ -309,8 +352,8 @@ export class SadasMapComponent {
       .subscribe((result) => this.applyQueryResult(result));
 
     effect(() => {
-      const config = this.config();
-      if (config.hasQuery === false) {
+      const source = this.querySource();
+      if (!source.hasQuery) {
         // Query vuota: si visualizza il risultato dell'elemento Parent.
         const parentResult = this.parentResult();
         untracked(() => {
@@ -324,8 +367,20 @@ export class SadasMapComponent {
         });
         return;
       }
-      const params = this.parentParams();
-      untracked(() => this.query$.next({ config, params }));
+      const params = this.params();
+      untracked(() => this.query$.next({ componentId: source.componentId, params }));
+    });
+
+    // Vista: se MapCenterLat/Long/Zoom cambiano dopo la creazione, la mappa si sposta lì.
+    // Solo quando cambiano davvero: gli spostamenti fatti dall'utente non vengono annullati.
+    effect(() => {
+      const view = this.configuredView();
+      if (!this.mapReady()) return;
+      untracked(() => {
+        if (this.appliedView && sameValue(view, this.appliedView)) return;
+        this.appliedView = view;
+        this.map?.setView(view.center, view.zoom, { animate: false });
+      });
     });
 
     // Geometrie: dopo nuovi dati, cambio metrica o spostamento della mappa.
@@ -363,7 +418,7 @@ export class SadasMapComponent {
       const repeated = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
       if (repeated.length > 0) {
         console.warn(
-          `[sadas-map] ${untracked(this.config).id}: ID Metric ripetuti (${repeated.join(', ')}): ` +
+          `[sadas-map] ${untracked(this.settings).id}: ID Metric ripetuti (${repeated.join(', ')}): ` +
             'il parametro IDMETRIC del clic è ambiguo',
         );
       }
@@ -372,7 +427,7 @@ export class SadasMapComponent {
     // Disegno: ogni volta che cambiano dati, metrica, scala, aree visibili o geometrie disponibili.
     effect(() => {
       if (!this.mapReady()) return;
-      const config = this.config();
+      const config = this.settings();
       const metric = this.metric();
       const rows = this.uniqueRows();
       const range = this.range();
@@ -433,17 +488,15 @@ export class SadasMapComponent {
   // ---------------------------------------------------------------------------
 
   private initMap(): void {
-    const config = this.config();
-    const hasCenter = Number.isFinite(config.mapCenterLat) && Number.isFinite(config.mapCenterLng);
-
+    const view = this.configuredView();
     const map = L.map(this.mapHost().nativeElement, {
-      center: hasCenter ? [config.mapCenterLat!, config.mapCenterLng!] : DEFAULT_CENTER,
-      // MapCenterZoom assente, non numerico o NaN → DEFAULT_ZOOM; fuori intervallo → limitato.
-      zoom: clampZoom(config.mapCenterZoom, this.zoomLimits.maxZoom, DEFAULT_ZOOM),
+      center: view.center,
+      zoom: view.zoom,
       maxZoom: this.zoomLimits.maxZoom,
       preferCanvas: true,
     });
     this.map = map;
+    this.appliedView = view;
     this.detailLevel.set(detailLevelForZoom(map.getZoom()));
 
     // Mappa di base: solo OpenStreetMap. Se le tile non arrivano (rete chiusa, server non raggiungibile)
@@ -494,7 +547,7 @@ export class SadasMapComponent {
   private loadNeededGeometries() {
     const map = this.map;
     const metric = this.metric();
-    const config = this.config();
+    const config = this.settings();
     const rows = this.rows();
     if (!map || !metric || rows.length === 0) return of(false);
 
@@ -782,7 +835,7 @@ export class SadasMapComponent {
 
   private onMapClick(e: L.LeafletMouseEvent): void {
     this.select(null); // clic fuori dalle aree: nessuna area selezionata
-    if (!this.config().dataEntryFlag) return;
+    if (!this.settings().dataEntryFlag) return;
     const metric = this.metric();
     this.areaClick.emit({
       IDAREAMAP: null,

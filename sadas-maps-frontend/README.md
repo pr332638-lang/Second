@@ -50,6 +50,7 @@ src/app/maps/
     ├── geo.ts                     Livello di dettaglio per zoom, bbox
     ├── zoom.ts                    Zoom iniziale e limiti di zoom (con zoom.spec.ts)
     ├── geometry-cache.ts          Salvataggio in memoria delle geometrie; IdArea sempre come testo (con geometry-cache.spec.ts)
+    ├── equal.ts                   Uguaglianza per contenuto di configurazioni e parametri (con equal.spec.ts)
     └── scale.spec.ts              Test (Vitest)
 ```
 
@@ -371,6 +372,8 @@ decodificare il GeoJSON in un Web Worker.
    della mappa accettano JavaScript. Valutare codice scritto dagli utenti va fatto con attenzione alla sicurezza.
 3. Min/Max Value mancanti: qui si calcolano dai dati.
 4. Una riga per IdArea; con più righe sulla stessa area vince l'ultima, come nell'originale.
+   Le righe scartate sono segnalate in un avviso sotto la mappa: quale riga vince dipende dall'ordine,
+   che solo la query può garantire (ORDER BY).
    Le righe scartate non contano nemmeno per la scala e la legenda. Con External point senza IdArea
    ogni riga è un record distinto: due record con le stesse coordinate (es. due negozi nello stesso
    indirizzo) compaiono entrambi.

@@ -1,5 +1,5 @@
 <div class="sadas-map__frame">
-  @if (config().title; as title) {
+  @if (settings().title; as title) {
     <header class="sadas-map__header">
       <h2 class="sadas-map__title">{{ title }}</h2>
     </header>
@@ -10,8 +10,8 @@
       #mapHost
       class="sadas-map__canvas"
       role="region"
-      [attr.tabindex]="config().tabIndex ?? 0"
-      [attr.aria-label]="config().title || 'Mappa'"
+      [attr.tabindex]="settings().tabIndex ?? 0"
+      [attr.aria-label]="settings().title || 'Mappa'"
     ></div>
 
     @if (showPanel()) {
@@ -103,13 +103,16 @@
       }
     }
 
-    @if (unmatched() > 0 || notice() || geometryNotice() || noDataNotice()) {
+    @if (unmatched() > 0 || repeatedRows() > 0 || notice() || geometryNotice() || noDataNotice()) {
       <div class="sadas-map__notice" role="status">
         @if (noDataNotice(); as d) {
           <span>{{ d }}</span>
         }
         @if (unmatched() > 0) {
           <span>{{ unmatched() }} record senza area corrispondente</span>
+        }
+        @if (repeatedRows() > 0) {
+          <span>Righe ripetute per la stessa area: {{ repeatedRows() }} (vale l'ultima)</span>
         }
         @if (notice(); as n) {
           <span>{{ n }}</span>
