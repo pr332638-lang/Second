@@ -148,9 +148,15 @@ configureDefaultIcon();
   },
 })
 export class SadasMapComponent {
-  /** Configurazione del componente (proprietà definite nell'editor SadasBI). Passare un oggetto stabile. */
+  /**
+   * Configurazione del componente (proprietà definite nell'editor SadasBI). Si confronta per contenuto
+   * (vedi `settings`): un oggetto nuovo ma uguale non fa ripartire niente.
+   */
   readonly config = input.required<MapsConfig>();
-  /** Parametri ereditati dal Parent (es. condizioni di un filtro). Ogni cambio rilancia la query. */
+  /**
+   * Parametri ereditati dal Parent (es. condizioni di un filtro). Un cambio di contenuto rilancia la query;
+   * un oggetto nuovo con gli stessi valori no (vedi `params`).
+   */
   readonly parentParams = input<Readonly<Record<string, unknown>>>({});
   /** Risultato della query del Parent: usato quando la mappa non ha una Query propria (hasQuery = false). */
   readonly parentResult = input<MapsQueryResult | null>(null);

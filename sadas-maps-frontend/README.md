@@ -235,7 +235,10 @@ Nel Popup Value, `${P.NOME}` inserisce un parametro ricevuto dal Parent; i valor
 **Dimensioni.** Senza Width e Height la mappa occupa tutto lo spazio libero, come nel componente originale.
 Se il contenitore della pagina non ha un'altezza definita, vale un'altezza minima di 300 px.
 
-`config` deve essere un oggetto stabile: ogni nuovo oggetto rilancia la query.
+`config` e `parentParams` si confrontano per contenuto: un oggetto nuovo ma uguale al precedente non fa
+ripartire niente. La query riparte solo se cambiano l'ID del componente, la presenza della Query (`hasQuery`)
+o i parametri del Parent; titolo, metriche e centro non la rilanciano. Se MapCenterLat/Long/Zoom cambiano,
+la mappa si sposta lì. `parentResult` invece si confronta per riferimento: ogni nuovo oggetto ridisegna la mappa.
 Il componente **non naviga**: emette `areaClick` con IDAREAMAP, IDMETRIC, METR_LABEL, METR_VALUE,
 LABELMAP, LAT, LNG e il record; l'host apre Page o HyperLink con il meccanismo di SadasBI.
 Page e HyperLink non sono mai impostati insieme. Il drill-down (regioni → province → comuni)
