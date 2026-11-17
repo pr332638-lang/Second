@@ -358,6 +358,9 @@ decodificare il GeoJSON in un Web Worker.
    della mappa accettano JavaScript. Valutare codice scritto dagli utenti va fatto con attenzione alla sicurezza.
 3. Min/Max Value mancanti: qui si calcolano dai dati.
 4. Una riga per IdArea; con più righe sulla stessa area vince l'ultima, come nell'originale.
+   Le righe scartate non contano nemmeno per la scala e la legenda. Con External point senza IdArea
+   ogni riga è un record distinto: due record con le stesse coordinate (es. due negozi nello stesso
+   indirizzo) compaiono entrambi.
 5. Più metriche: una alla volta, scelta dal pannello dei livelli, come nell'originale.
 6. Server delle tile OSM: oggi il server pubblico (`MAPS_OSM_TILE_URL`, tile fino allo zoom 19 con
    `MAPS_OSM_MAX_NATIVE_ZOOM`). Per la produzione va scelto un server interno o commerciale.

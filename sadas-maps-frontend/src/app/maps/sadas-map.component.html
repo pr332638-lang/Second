@@ -102,13 +102,16 @@
       }
     }
 
-    @if (unmatched() > 0 || notice()) {
+    @if (unmatched() > 0 || notice() || geometryNotice()) {
       <div class="sadas-map__notice" role="status">
         @if (unmatched() > 0) {
           <span>{{ unmatched() }} record senza area corrispondente</span>
         }
         @if (notice(); as n) {
           <span>{{ n }}</span>
+        }
+        @if (geometryNotice(); as g) {
+          <span>{{ g }}</span>
         }
       </div>
     }

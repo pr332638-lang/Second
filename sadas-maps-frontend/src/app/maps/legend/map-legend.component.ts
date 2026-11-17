@@ -64,17 +64,17 @@ import { formatValue } from '../utils/values';
       margin-top: 2px;
       font-variant-numeric: tabular-nums;
     }
+    /* Bolle a grandezza reale, come sulla mappa: niente limiti di dimensione,
+       altrimenti la bolla più grande risulterebbe più piccola di quella disegnata. */
     .legend__bubbles {
       display: flex;
       align-items: flex-end;
       gap: 6px;
-      max-height: 40px;
     }
     .legend__bubble {
       display: inline-block;
       flex: none;
-      max-width: 40px;
-      max-height: 40px;
+      box-sizing: border-box;
       border-radius: 50%;
       border: 1px solid currentColor;
       opacity: 0.6;

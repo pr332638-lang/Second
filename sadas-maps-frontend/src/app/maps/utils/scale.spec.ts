@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { MapMetric } from '../maps.models';
+import type { MapMetric, MapsConfig } from '../maps.models';
 import { interpolateColor, normalize, resolveRange, styleFor } from './scale';
-import { fieldValue, formatValue, idOf, renderTemplate, toCssSize, toNumber } from './values';
+import {
+  areaIdOf,
+  fieldValue,
+  formatValue,
+  idOf,
+  lastRowPerKey,
+  renderTemplate,
+  toCssSize,
+  toNumber,
+  uniqueRowsPerArea,
+} from './values';
 
 const metric: MapMetric = {
   idMetric: 'M1',
@@ -136,6 +146,81 @@ describe('utilità sui valori', () => {
   });
   it('interpola i colori esadecimali corti', () => {
     expect(interpolateColor('#000', '#fff', 1)).toBe('#ffffff');
+  });
+});
+
+describe('righe con lo stesso IdArea', () => {
+  it("vince l'ultima riga, le righe senza chiave restano tutte", () => {
+    const rows = [
+      { ID: '1', V: 'a' },
+      { ID: '2', V: 'b' },
+      { ID: null, V: 'x' },
+      { ID: '1', V: 'c' },
+      { ID: null, V: 'y' },
+    ];
+    const result = lastRowPerKey(rows, (r) => idOf(r, '${F.ID}'));
+    expect(result.map((r) => r.V)).toEqual(['b', 'c', 'x', 'y']);
+  });
+
+  const config: MapsConfig = {
+    id: 'map1',
+    fieldKeyForPolygons: '${F.ID_POLY}',
+    fieldKeyForPoint: '${F.ID_PUNTO}',
+    externalPoint: false,
+    fieldLatitude: '${F.LAT}',
+    fieldLongitude: '${F.LNG}',
+    dataEntryFlag: false,
+    metrics: [],
+  };
+  // Min/Max Value non impostati: la scala si calcola dai dati.
+  const fromData = { ...metric, currentValueField: '${F.V}', minValue: undefined, maxValue: undefined };
+  const polygons: MapMetric = { ...fromData, displayType: 'POLYGON' };
+  const markers: MapMetric = { ...fromData, displayType: 'MARKER' };
+
+  it('la scala usa solo le righe che vengono disegnate', () => {
+    const rows = [
+      { ID_POLY: 1, V: 100 },
+      { ID_POLY: 2, V: 10 },
+      { ID_POLY: 1, V: 5 }, // sostituisce la prima riga: 100 non deve entrare nella scala
+    ];
+    const unique = uniqueRowsPerArea(rows, polygons, config);
+    expect(unique.map((r) => r['V'])).toEqual([10, 5]);
+    expect(resolveRange(polygons, unique)).toEqual({ min: 5, max: 10 });
+  });
+
+  it('per i punti conta Field Key for Point, non quello dei poligoni', () => {
+    const rows = [
+      { ID_POLY: 1, ID_PUNTO: 'A', V: 1 },
+      { ID_POLY: 1, ID_PUNTO: 'B', V: 2 },
+      { ID_POLY: 2, ID_PUNTO: 'A', V: 3 },
+    ];
+    expect(uniqueRowsPerArea(rows, markers, config).map((r) => r['V'])).toEqual([2, 3]);
+    expect(areaIdOf(rows[0], markers, config)).toBe('A');
+    expect(areaIdOf(rows[0], polygons, config)).toBe('1');
+  });
+
+  it('External point: record distinti con le stesse coordinate restano tutti', () => {
+    const external: MapsConfig = { ...config, externalPoint: true, fieldKeyForPoint: undefined };
+    const rows = [
+      { INSEGNA: 'Negozio 1', LAT: '45,46', LNG: '9,19' },
+      { INSEGNA: 'Negozio 2', LAT: '45,46', LNG: '9,19' }, // stesso indirizzo, negozio diverso
+      { INSEGNA: 'Negozio 3', LAT: '41,90', LNG: '12,49' },
+    ];
+    expect(areaIdOf(rows[0], markers, external)).toBeNull();
+    expect(uniqueRowsPerArea(rows, markers, external).map((r) => r['INSEGNA'])).toEqual([
+      'Negozio 1',
+      'Negozio 2',
+      'Negozio 3',
+    ]);
+  });
+
+  it('External point con IdArea: vince comunque l’ultima riga per IdArea', () => {
+    const external: MapsConfig = { ...config, externalPoint: true };
+    const rows = [
+      { ID_PUNTO: 7, V: 1, LAT: '45,46', LNG: '9,19' },
+      { ID_PUNTO: 7, V: 2, LAT: '45,47', LNG: '9,20' },
+    ];
+    expect(uniqueRowsPerArea(rows, markers, external).map((r) => r['V'])).toEqual([2]);
   });
 });
 

@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import * as L from 'leaflet';
-import { EMPTY, Subject, catchError, debounceTime, of, switchMap } from 'rxjs';
+import { EMPTY, Subject, catchError, debounceTime, of, switchMap, tap } from 'rxjs';
 
 import { MapLegendComponent } from './legend/map-legend.component';
 import type {
@@ -47,6 +47,7 @@ import {
   type ValueRange,
 } from './utils/scale';
 import {
+  areaIdOf,
   escapeHtml,
   fieldValue,
   formatValue,
@@ -54,6 +55,7 @@ import {
   renderTemplate,
   toCssSize,
   toNumber,
+  uniqueRowsPerArea,
   type ParentParams,
 } from './utils/values';
 
@@ -87,6 +89,12 @@ const DEFAULT_ZOOM = 6;
 const AREA_FILTER_THRESHOLD = 15;
 const PREQUERY_DEFAULT_MESSAGE = 'Nessun dato da visualizzare: la condizione di pre-query non è soddisfatta.';
 const BASE_MAP_UNAVAILABLE = 'Mappa di base non raggiungibile: controllare la connessione o il server delle mappe.';
+const GEOMETRIES_UNAVAILABLE = 'Confini o punti delle aree non caricati: nuovo tentativo al prossimo spostamento della mappa.';
+/**
+ * Scala usata quando non ce n'è una (nessun valore numerico e Min/Max non impostati):
+ * tutti i valori risultano "senza valore", quindi aree grigie e marcatori normali, invece di una mappa vuota.
+ */
+const NO_VALUES_RANGE: ValueRange = { min: 0, max: 0 };
 
 /** Bordi di default, al passaggio del mouse e alla selezione (il componente originale cambiava opacità e bordo). */
 const POLYGON_BORDER: L.PathOptions = { color: '#ffffff', weight: 0.6 };
@@ -153,6 +161,8 @@ export class SadasMapComponent {
   protected readonly message = signal<string | null>(null);
   /** Avviso non bloccante sulla mappa di base (es. tile non raggiungibili). */
   protected readonly notice = signal<string | null>(null);
+  /** Avviso non bloccante: l'ultima richiesta di geometrie è fallita. Sparisce alla prima riuscita. */
+  protected readonly geometryNotice = signal<string | null>(null);
   protected readonly rows = signal<readonly QueryRow[]>([]);
   protected readonly unmatched = signal(0);
 
@@ -177,9 +187,17 @@ export class SadasMapComponent {
     Math.min(this.selectedMetric(), Math.max(0, this.metrics().length - 1)),
   );
   protected readonly metric = computed<MapMetric | null>(() => this.metrics()[this.metricIndex()] ?? null);
+  /**
+   * Righe della metrica corrente, una per IdArea (vince l'ultima): le stesse per scala, legenda,
+   * pannello dei livelli e disegno, così i valori delle righe scartate non allargano la scala.
+   */
+  private readonly uniqueRows = computed<readonly QueryRow[]>(() => {
+    const m = this.metric();
+    return m ? uniqueRowsPerArea(this.rows(), m, this.config()) : this.rows();
+  });
   private readonly range = computed<ValueRange | null>(() => {
     const m = this.metric();
-    return m ? resolveRange(m, this.rows()) : null;
+    return m ? resolveRange(m, this.uniqueRows()) : null;
   });
 
   private readonly scope = computed<GeometryScope>(() => ({
@@ -193,7 +211,7 @@ export class SadasMapComponent {
     const config = this.config();
     if (!metric) return [];
     const byKey = new Map<string, string>();
-    for (const row of this.rows()) {
+    for (const row of this.uniqueRows()) {
       const key = areaKeyOf(row, metric, config);
       if (key === null) continue;
       const label = fieldValue(row, config.fieldLabel);
@@ -302,8 +320,13 @@ export class SadasMapComponent {
         debounceTime(this.perf.geometryDebounceMs),
         switchMap(() =>
           this.loadNeededGeometries().pipe(
+            // Ogni risposta riuscita toglie l'avviso di un errore precedente.
+            tap(() => this.geometryNotice.set(null)),
             catchError((err: unknown) => {
+              // Senza avviso le aree resterebbero "in arrivo" per sempre: mappa vuota senza spiegazioni.
+              // Le geometrie mancanti non finiscono in memoria, quindi il prossimo spostamento le richiede di nuovo.
               console.error('[sadas-map] errore geometrie', err);
+              this.geometryNotice.set(GEOMETRIES_UNAVAILABLE);
               return of(false);
             }),
           ),
@@ -325,7 +348,7 @@ export class SadasMapComponent {
       if (!this.mapReady()) return;
       const config = this.config();
       const metric = this.metric();
-      const rows = this.rows();
+      const rows = this.uniqueRows();
       const range = this.range();
       const hidden = this.hiddenAreas();
       // Il livello conta solo per i poligoni: bolle e marcatori non si ridisegnano cambiando zoom.
@@ -492,7 +515,7 @@ export class SadasMapComponent {
   private render(
     config: MapsConfig,
     metric: MapMetric | null,
-    allRows: readonly QueryRow[],
+    uniqueRows: readonly QueryRow[],
     range: ValueRange | null,
     hidden: ReadonlySet<string>,
     level: GeometryLevel | null,
@@ -504,25 +527,28 @@ export class SadasMapComponent {
     this.dataLayer = undefined;
     this.selectedLayer = null; // la chiave resta: il nuovo layer verrà riselezionato
 
-    if (!metric || !range || allRows.length === 0) {
+    if (!metric || uniqueRows.length === 0) {
       this.unmatched.set(0);
       return;
     }
+    // Senza valori numerici si disegna lo stesso: aree grigie, bolle minime, marcatori normali.
+    const scale = range ?? NO_VALUES_RANGE;
 
-    // Le aree nascoste dal pannello non si disegnano, ma restano nella scala e nella legenda.
+    // Le righe sono già una per IdArea (uniqueRows). Le aree nascoste dal pannello non si disegnano,
+    // ma restano nella scala e nella legenda.
     const rows =
       hidden.size === 0
-        ? allRows
-        : allRows.filter((row) => {
+        ? uniqueRows
+        : uniqueRows.filter((row) => {
             const key = areaKeyOf(row, metric, config);
             return key === null || !hidden.has(key);
           });
 
     const built =
       metric.displayType === 'POLYGON'
-        ? this.buildPolygons(config, metric, rows, range, level ?? detailLevelForZoom(map.getZoom()))
+        ? this.buildPolygons(config, metric, rows, scale, level ?? detailLevelForZoom(map.getZoom()))
         : metric.displayType === 'BUBBLE'
-          ? this.buildBubbles(config, metric, rows, range)
+          ? this.buildBubbles(config, metric, rows, scale)
           : this.buildMarkers(config, metric, rows);
 
     this.dataLayer = built.layer.addTo(map);
@@ -780,9 +806,8 @@ function collectIds(rows: readonly QueryRow[], field: string | undefined): strin
  * oppure le coordinate con External point senza IdArea. Stessa chiave usata per la selezione.
  */
 function areaKeyOf(row: QueryRow, metric: MapMetric, config: MapsConfig): string | null {
-  if (metric.displayType === 'POLYGON') return idOf(row, config.fieldKeyForPolygons);
-  const id = idOf(row, config.fieldKeyForPoint);
-  if (id !== null || !config.externalPoint) return id;
+  const id = areaIdOf(row, metric, config);
+  if (id !== null || metric.displayType === 'POLYGON' || !config.externalPoint) return id;
   const lat = toNumber(fieldValue(row, config.fieldLatitude));
   const lng = toNumber(fieldValue(row, config.fieldLongitude));
   return isValidLatLng(lat, lng) ? `${lat},${lng}` : null;

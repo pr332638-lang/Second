@@ -1,4 +1,4 @@
-import type { QueryRow } from '../maps.models';
+import type { MapMetric, MapsConfig, QueryRow } from '../maps.models';
 import { areaKey } from './geometry-cache';
 
 /**
@@ -58,6 +58,46 @@ export function idOf(row: QueryRow, ref: string | undefined): string | null {
   // Stessa normalizzazione della memoria delle geometrie: " 1203" e "1203.0" diventano "1203",
   // così la riga si collega alla sua geometria.
   return areaKey(fieldValue(row, ref));
+}
+
+/**
+ * Una riga per chiave: con più righe con la stessa chiave vince l'ultima, come nel componente originale.
+ * Le righe senza chiave (null) restano tutte. L'ordine è quello delle ultime occorrenze.
+ */
+export function lastRowPerKey<T>(rows: readonly T[], keyOf: (row: T) => string | null): T[] {
+  const byKey = new Map<string, T>();
+  const withoutKey: T[] = [];
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (key === null) {
+      withoutKey.push(row);
+    } else {
+      byKey.delete(key); // la riga si sposta in fondo: conta l'ordine dell'ultima occorrenza
+      byKey.set(key, row);
+    }
+  }
+  return [...byKey.values(), ...withoutKey];
+}
+
+/**
+ * IdArea della riga per la metrica: Field Key for Polygons per i poligoni, Field Key for Point
+ * per bolle e marcatori. null se manca: non si usano mai le coordinate di External point.
+ */
+export function areaIdOf(row: QueryRow, metric: MapMetric, config: MapsConfig): string | null {
+  return idOf(row, metric.displayType === 'POLYGON' ? config.fieldKeyForPolygons : config.fieldKeyForPoint);
+}
+
+/**
+ * Righe da usare per scala, legenda, pannello dei livelli e disegno: una per IdArea, vince l'ultima
+ * (assunzione 4 del README). Senza, un'area con più righe verrebbe disegnata più volte e i valori
+ * scartati allargherebbero la scala.
+ *
+ * Le righe senza IdArea restano tutte: con External point sono record distinti (es. due negozi
+ * nello stesso indirizzo) che devono comparire entrambi, anche se hanno le stesse coordinate.
+ * Le righe senza IdArea e senza coordinate valide restano anch'esse, e si contano come record senza area.
+ */
+export function uniqueRowsPerArea(rows: readonly QueryRow[], metric: MapMetric, config: MapsConfig): QueryRow[] {
+  return lastRowPerKey(rows, (row) => areaIdOf(row, metric, config));
 }
 
 function formatRaw(value: unknown): string {
