@@ -38,14 +38,14 @@ src/app/maps/
 ├── services/
 │   ├── maps-data.service.ts       Query e geometrie (con cache per livello di dettaglio)
 │   ├── base-layer.factory.ts      Mappa di base OpenStreetMap: URL e zoom del server
-│   ├── leaflet-plugins.ts         Caricamento di markercluster
+│   ├── leaflet-global.ts          Leaflet come oggetto globale L, prima dei plugin
+│   ├── leaflet-plugins.ts         markercluster (nel bundle principale) e creazione dei cluster
 │   └── performance.ts             Soglie di prestazioni (MAPS_PERFORMANCE), tarate per computer lenti
 └── utils/
     ├── scale.ts                   Interpolazione colore, opacità, raggio
     ├── values.ts                  Numeri con virgola, escape HTML, template dei popup
     ├── geo.ts                     Livello di dettaglio per zoom, bbox
     ├── zoom.ts                    Zoom iniziale e limiti di zoom (con zoom.spec.ts)
-    ├── load-once.ts               Caricamento una sola volta, con nuovo tentativo dopo un errore (con load-once.spec.ts)
     ├── geometry-cache.ts          Salvataggio in memoria delle geometrie; IdArea sempre come testo (con geometry-cache.spec.ts)
     └── scale.spec.ts              Test (Vitest)
 ```
@@ -122,6 +122,8 @@ npm install -D @types/leaflet @types/leaflet.markercluster @types/geojson
 
 Si usa **Leaflet puro**, senza wrapper Angular: la mappa si crea nel codice del componente.
 L'unico plugin è Leaflet.markercluster (uso confermato dai tutor), per raggruppare i marcatori quando sono molti.
+Usa l'oggetto globale `L` appena viene caricato: `leaflet-global.ts` lo espone e va importato prima del plugin
+(lo fa `leaflet-plugins.ts`).
 
 Si usa Leaflet 1.9 perché markercluster è pensato per la 1.x.
 Leaflet 2.0 cambia l'API (niente `L` globale, costruttori al posto dei metodi factory) e all'ultima
@@ -317,9 +319,9 @@ Compiti del back-end:
 - Valori e geometrie separati; le geometrie restano in cache per livello di dettaglio.
 - Poligoni solo nella vista corrente (+20% di margine), con livello di dettaglio legato allo zoom.
 - Rendering su canvas (`preferCanvas`) per poligoni e bolle.
-- Marcatori raggruppati in cluster oltre 200 elementi. Il plugin si scarica solo se serve,
-  una volta sola per tutta la pagina. Se il download fallisce, la mappa mostra i marcatori singoli
-  e il ridisegno successivo con molti marcatori riprova a scaricarlo.
+- Marcatori raggruppati in cluster oltre 200 elementi. Il plugin è nel bundle principale (circa 8 KB
+  compressi), quindi è sempre disponibile. Scaricarlo solo quando serve non conviene: se quel download
+  fallisce, Chromium (Chrome, Edge) ricorda l'errore e non riprova fino al ricaricamento della pagina.
 - Angular 22 è zoneless e OnPush di default: gli eventi della mappa non scatenano change detection globale.
 
 ### Computer lenti

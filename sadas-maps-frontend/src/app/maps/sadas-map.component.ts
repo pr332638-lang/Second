@@ -33,7 +33,7 @@ import {
   createOsmLayer,
   injectZoomLimits,
 } from './services/base-layer.factory';
-import { loadMarkerClusterGroup } from './services/leaflet-plugins';
+import { createMarkerClusterGroup } from './services/leaflet-plugins';
 import { MAPS_PERFORMANCE } from './services/performance';
 import { MapsDataService, type AreaFeature, type GeometryScope } from './services/maps-data.service';
 import { boundsToBbox, detailLevelForZoom, isValidLatLng } from './utils/geo';
@@ -259,9 +259,6 @@ export class SadasMapComponent {
 
   private map?: L.Map;
   private dataLayer?: L.Layer;
-  private clusterGroupCtor?: Awaited<ReturnType<typeof loadMarkerClusterGroup>>;
-  /** true mentre il plugin dei cluster è in caricamento: evita richieste doppie. */
-  private clusterLoading = false;
   private resizeObserver?: ResizeObserver;
 
   /** Area selezionata: la chiave sopravvive ai ridisegni, il layer no. */
@@ -441,30 +438,6 @@ export class SadasMapComponent {
     this.resizeObserver.observe(this.mapHost().nativeElement);
 
     this.mapReady.set(true);
-
-    // Il plugin dei cluster si scarica in anticipo solo se c'è almeno una metrica a marcatori.
-    if (this.metrics().some((m) => m.displayType === 'MARKER')) this.ensureClusterGroup();
-  }
-
-  /**
-   * Chiede il plugin dei cluster, se non è già disponibile o in arrivo.
-   * Il caricamento non blocca la mappa: intanto i marcatori si disegnano senza cluster.
-   * Se fallisce, la mappa funziona lo stesso e il prossimo ridisegno con molti marcatori riprova.
-   */
-  private ensureClusterGroup(): void {
-    if (this.clusterGroupCtor || this.clusterLoading) return;
-    this.clusterLoading = true;
-    loadMarkerClusterGroup()
-      .then((ctor) => {
-        this.clusterGroupCtor = ctor;
-        if (this.map) this.geometryVersion.update((v) => v + 1); // ridisegna con i cluster
-      })
-      .catch((err: unknown) =>
-        console.warn('[sadas-map] clustering non disponibile, nuovo tentativo al prossimo ridisegno', err),
-      )
-      .finally(() => {
-        this.clusterLoading = false;
-      });
   }
 
   private applyQueryResult(result: MapsQueryResult | null): void {
@@ -656,14 +629,11 @@ export class SadasMapComponent {
     }
 
     if (markers.length > this.perf.clusterThreshold) {
-      if (this.clusterGroupCtor) {
-        const cluster = new this.clusterGroupCtor({ chunkedLoading: true, showCoverageOnHover: false });
+      const cluster = createMarkerClusterGroup({ chunkedLoading: true, showCoverageOnHover: false });
+      if (cluster) {
         cluster.addLayers(markers);
         return { layer: cluster, unmatched };
       }
-      // Plugin non ancora arrivato o caricamento fallito in precedenza: lo si chiede (di nuovo)
-      // e intanto si disegnano i marcatori singoli; all'arrivo la mappa si ridisegna con i cluster.
-      this.ensureClusterGroup();
     }
     return { layer: L.featureGroup(markers), unmatched };
   }
